@@ -252,7 +252,7 @@ export function useMultiplayer() {
 
   // Host a room
   const hostRoom = useCallback(
-    async (customCode?: string) => {
+    async (customCode?: string, preferredName?: string) => {
       setIsConnecting(true);
       setConnectError(null);
       try {
@@ -263,7 +263,7 @@ export function useMultiplayer() {
         setLocalPeerId(peerId);
         setLocalPlayerId('player1');
 
-        const initialHostName = 'Commander Host';
+        const initialHostName = preferredName?.trim() || 'Commander Host';
         setLocalPlayerName(initialHostName);
 
         const initialSeats: MultiplayerSeat[] = [
@@ -295,7 +295,7 @@ export function useMultiplayer() {
   );
 
   // Join a room
-  const joinRoom = useCallback(async (codeToJoin: string) => {
+  const joinRoom = useCallback(async (codeToJoin: string, preferredName?: string) => {
     setIsConnecting(true);
     setConnectError(null);
     try {
@@ -303,14 +303,14 @@ export function useMultiplayer() {
       setRole('client');
       setRoomCode(codeToJoin.toUpperCase());
       setLocalPeerId(peerId);
-      const defaultClientName = `Commander Duelist ${peerId.slice(-4)}`;
-      setLocalPlayerName(defaultClientName);
+      const chosenName = preferredName?.trim() || `Commander Duelist ${peerId.slice(-4)}`;
+      setLocalPlayerName(chosenName);
 
       // Notify host of info
       multiplayerService.sendMessage({
         type: 'UPDATE_PLAYER_INFO',
         senderPeerId: peerId,
-        payload: { name: defaultClientName },
+        payload: { name: chosenName },
       });
     } catch {
       setConnectError('Room not found or host unavailable.');

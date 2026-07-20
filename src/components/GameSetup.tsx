@@ -14,8 +14,8 @@ interface GameSetupProps {
   localPlayerName: string;
   isConnecting: boolean;
   connectError: string | null;
-  onHostRoom: (customCode?: string) => void;
-  onJoinRoom: (code: string) => void;
+  onHostRoom: (customCode?: string, preferredName?: string) => void;
+  onJoinRoom: (code: string, preferredName?: string) => void;
   onClaimSeat: (seatId: PlayerId) => void;
   onReleaseSeat: (seatId: PlayerId) => void;
   onUpdatePlayerName: (name: string) => void;
@@ -75,48 +75,48 @@ export const GameSetup: React.FC<GameSetupProps> = ({
   };
 
   return (
-    <div className="w-full max-w-xl fantasy-panel rounded-3xl p-6 shadow-2xl flex flex-col items-center gap-5 backdrop-blur-xl border border-amber-600/40 my-auto">
+    <div className="w-full max-w-lg fantasy-panel rounded-2xl p-4 shadow-2xl flex flex-col items-center gap-3 backdrop-blur-xl border border-amber-600/40 max-h-[92vh] overflow-y-auto">
       {/* Title Header */}
-      <div className="flex flex-col items-center text-center">
-        <div className="p-3 bg-amber-500/10 border border-amber-500/40 rounded-2xl mb-2 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
-          <Swords className="w-8 h-8" />
+      <div className="flex items-center gap-2">
+        <div className="p-1.5 bg-amber-500/10 border border-amber-500/40 rounded-lg text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
+          <Swords className="w-4 h-4" />
         </div>
-        <h1 className="text-2xl font-black tracking-tight gold-gradient-text">HEX CLASH</h1>
-        <span className="text-xs font-mono text-amber-200/80 uppercase tracking-widest mt-0.5">
+        <h1 className="text-lg font-black tracking-tight gold-gradient-text">HEX CLASH</h1>
+        <span className="text-[10px] font-mono text-amber-200/70 uppercase tracking-widest">
           Tactical Command Duel
         </span>
       </div>
 
       {/* Mode Switcher: Local AI vs Online Multiplayer */}
-      <div className="w-full flex bg-slate-950 p-1 rounded-2xl border border-slate-800">
+      <div className="w-full flex bg-slate-950 p-1 rounded-xl border border-slate-800">
         <button
           onClick={() => {
             setMode('single');
             if (role !== 'single') onLeaveRoom();
           }}
-          className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+          className={`flex-1 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
             mode === 'single'
               ? 'bg-amber-500 text-slate-950 shadow-md font-extrabold'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Shield className="w-4 h-4" /> Local AI Duel
+          <Shield className="w-3.5 h-3.5" /> Local AI Duel
         </button>
         <button
           onClick={() => setMode('multiplayer')}
-          className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+          className={`flex-1 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
             mode === 'multiplayer'
               ? 'bg-amber-500 text-slate-950 shadow-md font-extrabold'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Globe className="w-4 h-4" /> Realtime Multiplayer
+          <Globe className="w-3.5 h-3.5" /> Realtime Multiplayer
         </button>
       </div>
 
       {/* Local AI Setup */}
       {mode === 'single' && (
-        <div className="w-full space-y-4">
+        <div className="w-full space-y-3">
           <div className="w-full space-y-2.5">
             <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400/90 mb-1 flex items-center gap-1.5 font-mono">
               <Crown className="w-3.5 h-3.5" /> Configure Single Player Seats
