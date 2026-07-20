@@ -262,15 +262,17 @@ export const HexMap: React.FC<HexMapProps> = ({
                 );
               })()}
 
-              {/* Axial Coordinates Overlay */}
-              <text
-                x={pixel.x}
-                y={pixel.y + 24}
-                textAnchor="middle"
-                className="fill-slate-600/50 text-[9px] font-mono pointer-events-none"
-              >
-                {tile.coord.q},{tile.coord.r}
-              </text>
+              {/* Axial Coordinates Overlay - show only on hover */}
+              {isHovered && (
+                <text
+                  x={pixel.x}
+                  y={pixel.y + 24}
+                  textAnchor="middle"
+                  className="fill-slate-200 text-[10px] font-bold font-mono pointer-events-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] z-30"
+                >
+                  {tile.coord.q},{tile.coord.r}
+                </text>
+              )}
 
               {/* Attack Impact Explosion Glow */}
               {isAnimTarget && (

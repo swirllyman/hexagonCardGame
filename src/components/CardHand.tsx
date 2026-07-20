@@ -85,7 +85,7 @@ export const CardHand: React.FC<CardHandProps> = ({
     const facingBadge = getFacingBadgeText(card);
 
     let accordionClass = '';
-    if (!isMoveCard && !isQueued) {
+    if (!isQueued) {
       if (isHovered) {
         accordionClass = 'mx-1 scale-105';
       } else if (isAnyHovered) {
@@ -101,7 +101,7 @@ export const CardHand: React.FC<CardHandProps> = ({
         onClick={() => !isLocked && !isQueued && onSelectCard(card)}
         onMouseEnter={() => setHoveredCardId(card.id)}
         onMouseLeave={() => setHoveredCardId(null)}
-        className={`relative w-28 h-36 rounded-xl border-2 ${categoryStyle.bg} ${categoryStyle.border} p-2 flex flex-col justify-between cursor-pointer transform transition-all duration-200 select-none shadow-lg ${
+        className={`relative w-24 h-32 rounded-xl border-2 ${categoryStyle.bg} ${categoryStyle.border} p-1.5 flex flex-col justify-between cursor-pointer transform transition-all duration-200 select-none shadow-lg ${
           accordionClass
         } ${
           isHovered ? 'z-50 shadow-2xl' : 'z-10'
@@ -113,11 +113,11 @@ export const CardHand: React.FC<CardHandProps> = ({
         {isHovered && <CardTooltip card={card} position="top" />}
 
         {/* Card Category Header */}
-        <div className="flex items-center justify-between gap-1 w-full overflow-hidden">
-          <span className={`text-[7.5px] uppercase font-mono font-bold px-1 py-0.5 rounded border whitespace-nowrap shrink-0 leading-none ${categoryStyle.badge}`}>
-            {isMoveCard ? 'Basic Move' : categoryStyle.label}
+        <div className="flex items-center justify-between gap-0.5 w-full overflow-hidden">
+          <span className={`text-[6.5px] uppercase font-mono font-bold px-0.5 py-0.5 rounded border whitespace-nowrap shrink-0 leading-none ${categoryStyle.badge}`}>
+            {isMoveCard ? 'Basic' : categoryStyle.label}
           </span>
-          <span className="text-[7.5px] font-mono font-bold text-amber-300 bg-amber-950/80 border border-amber-500/40 px-1 py-0.5 rounded flex items-center gap-0.5 whitespace-nowrap shrink-0 leading-none shadow-inner">
+          <span className="text-[6.5px] font-mono font-bold text-amber-300 bg-amber-950/80 border border-amber-500/40 px-0.5 py-0.5 rounded flex items-center gap-0.5 whitespace-nowrap shrink-0 leading-none shadow-inner">
             🎯 {card.range === 0 ? 'Self' : `R${card.range}`}
           </span>
         </div>
@@ -127,54 +127,54 @@ export const CardHand: React.FC<CardHandProps> = ({
           <SafeImage
             src={card.spriteUrl}
             alt={card.name}
-            className="w-7 h-7 object-contain rounded-lg shadow border border-amber-500/50 mb-0.5"
+            className="w-5.5 h-5.5 object-contain rounded-lg shadow border border-amber-500/50 mb-0.5"
             fallback={
-              <div className={`p-1.5 rounded-full bg-slate-950/90 border border-amber-600/40 ${categoryStyle.text} mb-0.5 shadow-inner`}>
-                {renderCardIcon(card.iconName, 'w-4 h-4')}
+              <div className={`p-1 rounded-full bg-slate-950/90 border border-amber-600/40 ${categoryStyle.text} mb-0.5 shadow-inner`}>
+                {renderCardIcon(card.iconName, 'w-3 h-3')}
               </div>
             }
           />
-          <h4 className="text-[10px] font-extrabold text-slate-100 text-center leading-tight tracking-tight">{card.name}</h4>
+          <h4 className="text-[8.5px] font-extrabold text-slate-100 text-center leading-tight tracking-tight">{card.name}</h4>
         </div>
 
         {/* Card Facing / Attribute Badge */}
         <div className="flex items-center justify-center my-0.5">
           {facingBadge ? (
-            <span className="inline-flex items-center gap-0.5 text-[8px] font-mono font-bold text-amber-300 bg-amber-950/90 px-1.5 py-0.5 rounded-full border border-amber-500/40 whitespace-nowrap shadow-inner">
+            <span className="inline-flex items-center gap-0.5 text-[7px] font-mono font-bold text-amber-300 bg-amber-950/90 px-1 py-0.5 rounded-full border border-amber-500/40 whitespace-nowrap shadow-inner">
               {facingBadge}
             </span>
           ) : (
-            <span className="inline-flex items-center gap-0.5 text-[8px] font-mono text-slate-400 bg-slate-900/60 px-1.5 py-0.5 rounded-full border border-slate-800 whitespace-nowrap">
+            <span className="inline-flex items-center gap-0.5 text-[7px] font-mono text-slate-400 bg-slate-900/60 px-1 py-0.5 rounded-full border border-slate-800 whitespace-nowrap">
               Standard
             </span>
           )}
         </div>
 
         {/* Card Stats Footer */}
-        <div className="flex items-center justify-center gap-1 border-t border-slate-800/80 pt-1 font-mono">
+        <div className="flex items-center justify-center gap-1 border-t border-slate-800/80 pt-0.5 font-mono">
           {isMoveCard ? (
-            <span className="text-[8.5px] font-bold text-emerald-400 uppercase tracking-tight">
+            <span className="text-[7.5px] font-bold text-emerald-400 uppercase tracking-tight">
               ∞ Unlimited
             </span>
           ) : (
             <>
               {card.damage && (
-                <span className="text-[9px] font-bold text-rose-400 flex items-center gap-0.5">
-                  <Sword className="w-2 h-2" /> {card.damage}
+                <span className="text-[8px] font-bold text-rose-400 flex items-center gap-0.5">
+                  <Sword className="w-1.5 h-1.5" /> {card.damage}
                 </span>
               )}
               {card.shield && (
-                <span className="text-[9px] font-bold text-sky-400 flex items-center gap-0.5">
-                  <ShieldIcon className="w-2 h-2" /> +{card.shield}
+                <span className="text-[8px] font-bold text-sky-400 flex items-center gap-0.5">
+                  <ShieldIcon className="w-1.5 h-1.5" /> +{card.shield}
                 </span>
               )}
               {card.healAmount && (
-                <span className="text-[9px] font-bold text-emerald-400 flex items-center gap-0.5">
-                  <HeartPulse className="w-2 h-2" /> +{card.healAmount}
+                <span className="text-[8px] font-bold text-emerald-400 flex items-center gap-0.5">
+                  <HeartPulse className="w-1.5 h-1.5" /> +{card.healAmount}
                 </span>
               )}
               {!card.damage && !card.shield && !card.healAmount && (
-                <span className="text-[8.5px] font-mono text-slate-400">Tactical</span>
+                <span className="text-[7.5px] font-mono text-slate-400">Tactical</span>
               )}
             </>
           )}
@@ -182,7 +182,7 @@ export const CardHand: React.FC<CardHandProps> = ({
 
         {/* Slot Assigned Badge Overlay */}
         {isQueued && (
-          <div className="absolute inset-0 bg-slate-950/80 rounded-xl flex items-center justify-center font-extrabold text-amber-400 text-[10px] uppercase tracking-wider">
+          <div className="absolute inset-0 bg-slate-950/80 rounded-xl flex items-center justify-center font-extrabold text-amber-400 text-[8.5px] uppercase tracking-wider">
             QUEUED
           </div>
         )}
@@ -190,39 +190,34 @@ export const CardHand: React.FC<CardHandProps> = ({
     );
   };
 
-  const movementHandCards = hand.filter(c => c.category === 'movement');
-  const abilityHandCards = hand.filter(c => c.category !== 'movement');
+  const abilityHandCards = hand;
 
   return (
-    <div className="w-full flex items-center justify-center gap-3 flex-wrap md:flex-nowrap">
-      {/* Move Cards Section (Far Left) */}
-      <div className="flex flex-col items-center gap-1.5 p-2 bg-slate-950/60 rounded-xl border border-emerald-500/30">
-        <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-wider">
-          <Compass className="w-3 h-3 text-emerald-400" />
-          <span>Move Cards</span>
-          <span className="text-[8px] bg-emerald-950 text-emerald-300 border border-emerald-500/40 px-1 rounded-full">
-            Basic + Hand
-          </span>
+    <div className="w-full h-full flex items-center justify-between bg-slate-950/75 border border-amber-600/20 rounded-xl p-2.5 shadow-inner gap-4">
+      {/* Move Cards Section (Left) */}
+      <div className="flex flex-col items-center gap-1.5 flex-1">
+        <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-widest border-b border-slate-800/80 w-full pb-1 mb-0.5 justify-center">
+          <Compass className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Basic Movements</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center w-[320px]">
           {DEFAULT_MOVE_CARDS.map((card, index) => renderCardItem(card, true, index))}
-          {movementHandCards.map((card, index) => renderCardItem(card, false, index))}
         </div>
       </div>
 
-      {/* Vertical Separator */}
-      <div className="hidden md:block w-px h-36 bg-gradient-to-b from-transparent via-amber-600/40 to-transparent" />
+      {/* Vertical Divider */}
+      <div className="hidden md:block w-px h-28 bg-slate-800/85 self-center" />
 
-      {/* Ability Cards Section (Center) */}
-      <div className="flex flex-col items-center gap-1.5 p-2 bg-slate-950/60 rounded-xl border border-amber-500/30">
-        <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider">
-          <Sparkle className="w-3 h-3 text-amber-400" />
-          <span>Ability Cards</span>
-          <span className="text-[8px] bg-amber-950 text-amber-300 border border-amber-500/40 px-1 rounded-full">
-            {abilityHandCards.length} Active
+      {/* Ability Cards Section (Right) */}
+      <div className="flex flex-col items-center gap-1.5 flex-[1.4]">
+        <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-amber-400 uppercase tracking-widest border-b border-slate-800/80 w-full pb-1 mb-0.5 justify-center">
+          <Sparkle className="w-3.5 h-3.5 text-amber-400" />
+          <span>Tactical Maneuvers</span>
+          <span className="text-[7.5px] font-mono bg-amber-950 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 rounded-full leading-none">
+            {abilityHandCards.length} Cards
           </span>
         </div>
-        <div className="flex items-center">
+        <div className="flex items-center justify-center w-[380px]">
           {abilityHandCards.map((card, index) => renderCardItem(card, false, index))}
         </div>
       </div>

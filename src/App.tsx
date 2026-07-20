@@ -266,7 +266,7 @@ export function App() {
             </div>
 
             {/* Bottom Dock Control Panel */}
-            <div className="relative z-40 flex-shrink-0 w-full fantasy-panel border border-amber-600/40 rounded-xl p-2 flex flex-col md:flex-row items-center justify-between gap-3 shadow-2xl backdrop-blur-md">
+            <div className="relative z-40 flex-shrink-0 w-full fantasy-panel border border-amber-600/40 rounded-xl p-2 flex flex-col md:flex-row items-stretch justify-between gap-3 shadow-2xl backdrop-blur-md">
               {waitingOnYou && (
                 <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-rose-600 to-rose-700 border border-rose-400 text-slate-100 font-extrabold text-[10px] px-4 py-1.5 rounded-full shadow-xl animate-bounce uppercase tracking-wider flex items-center gap-1.5 z-50">
                   <span className="w-1.5 h-1.5 rounded-full bg-slate-100 animate-ping" />
