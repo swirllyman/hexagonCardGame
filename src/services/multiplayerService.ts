@@ -1,4 +1,4 @@
-import Peer, { DataConnection } from 'peerjs';
+import Peer, { type DataConnection } from 'peerjs';
 import type { NetworkMessage } from '../types/game';
 
 type MessageHandler = (msg: NetworkMessage) => void;
