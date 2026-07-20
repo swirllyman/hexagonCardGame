@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Card } from '../types/game';
+import { SafeImage } from './SafeImage';
 import { 
   Footprints, 
   Zap, 
@@ -59,25 +60,28 @@ export const CardTooltip: React.FC<CardTooltipProps> = ({ card, position = 'top'
   return (
     <div className={`absolute ${posClasses} z-[100] w-64 ${style.bg} ${style.border} border-2 rounded-2xl p-3.5 shadow-[0_0_35px_rgba(0,0,0,0.95)] backdrop-blur-xl pointer-events-none animate-float transition-all`}>
       {/* Header Badge & Range */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
-        <span className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${style.badge}`}>
+      <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2 gap-1">
+        <span className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded border whitespace-nowrap shrink-0 ${style.badge}`}>
           {style.label}
         </span>
-        <div className="flex items-center gap-1 text-xs font-mono text-amber-200/90">
-          <Target className="w-3.5 h-3.5 text-amber-400" />
+        <div className="flex items-center gap-1 text-xs font-mono text-amber-200/90 whitespace-nowrap shrink-0">
+          <Target className="w-3.5 h-3.5 text-amber-400 shrink-0" />
           <span>{card.range === 0 ? 'Self' : `${card.range} Hexes`}</span>
         </div>
       </div>
 
       {/* Title & Large Icon / Sprite */}
       <div className="flex items-center gap-3 mb-2.5">
-        {card.spriteUrl ? (
-          <img src={card.spriteUrl} alt={card.name} className="w-10 h-10 object-contain rounded-xl border border-amber-500/60 shadow-lg" />
-        ) : (
-          <div className={`p-2 rounded-xl bg-slate-950 border border-amber-600/40 ${style.text} shadow-inner`}>
-            {renderCardIcon(card.iconName, 'w-6 h-6')}
-          </div>
-        )}
+        <SafeImage
+          src={card.spriteUrl}
+          alt={card.name}
+          className="w-10 h-10 object-contain rounded-xl border border-amber-500/60 shadow-lg"
+          fallback={
+            <div className={`p-2 rounded-xl bg-slate-950 border border-amber-600/40 ${style.text} shadow-inner`}>
+              {renderCardIcon(card.iconName, 'w-6 h-6')}
+            </div>
+          }
+        />
         <div>
           <h4 className="text-sm font-extrabold text-slate-100 tracking-tight leading-snug">{card.name}</h4>
           <span className="text-[10px] text-amber-200/60 font-mono">Tactical Deck</span>

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import type { Card } from '../types/game';
+import { DEFAULT_MOVE_CARDS } from '../utils/cardsData';
 import { CardTooltip } from './CardTooltip';
+import { SafeImage } from './SafeImage';
 import { 
   Footprints, 
   Zap, 
@@ -14,7 +16,9 @@ import {
   Sparkles, 
   ShieldAlert, 
   HeartPulse, 
-  Info 
+  Info,
+  Compass,
+  Sparkle
 } from 'lucide-react';
 
 interface CardHandProps {
@@ -72,91 +76,153 @@ export const CardHand: React.FC<CardHandProps> = ({
 }) => {
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
 
-  return (
-    <div className="w-full flex items-center justify-center">
-      <div className="flex items-center justify-center gap-2 flex-nowrap">
-        {hand.map((card) => {
-          const categoryStyle = CATEGORY_STYLES[card.category];
-          const isQueued = programmedQueue.some(c => c?.id === card.id);
-          const isSelected = selectedCard?.id === card.id;
-          const isHovered = hoveredCardId === card.id;
-          const facingBadge = getFacingBadgeText(card);
+  const renderCardItem = (card: Card, isMoveCard: boolean, index: number) => {
+    const categoryStyle = CATEGORY_STYLES[card.category];
+    const isQueued = !isMoveCard && programmedQueue.some(c => c?.id === card.id);
+    const isSelected = selectedCard?.id === card.id || (isMoveCard && selectedCard?.type === card.type && !hand.some(hc => hc.id === selectedCard?.id));
+    const isAnyHovered = hoveredCardId !== null;
+    const isHovered = hoveredCardId === card.id;
+    const facingBadge = getFacingBadgeText(card);
 
-          return (
-            <div
-              key={card.id}
-              onClick={() => !isLocked && !isQueued && onSelectCard(card)}
-              onMouseEnter={() => setHoveredCardId(card.id)}
-              onMouseLeave={() => setHoveredCardId(null)}
-              className={`relative w-28 h-36 rounded-xl border-2 ${categoryStyle.bg} ${categoryStyle.border} p-2 flex flex-col justify-between cursor-pointer transform hover:-translate-y-2 hover:shadow-2xl transition-all duration-200 select-none shadow-lg ${
-                isHovered ? 'z-50' : 'z-10'
-              } ${
-                isQueued ? 'opacity-35 grayscale pointer-events-none scale-95' : ''
-              } ${isSelected ? 'ring-2 ring-amber-400 -translate-y-2 shadow-[0_0_20px_rgba(245,158,11,0.7)]' : ''}`}
-            >
-              {/* Floating Full Detail Tooltip */}
-              {isHovered && <CardTooltip card={card} position="top" />}
+    let accordionClass = '';
+    if (!isMoveCard && !isQueued) {
+      if (isHovered) {
+        accordionClass = 'mx-1 scale-105';
+      } else if (isAnyHovered) {
+        accordionClass = index > 0 ? '-ml-6' : '';
+      } else {
+        accordionClass = index > 0 ? '-ml-3' : '';
+      }
+    }
 
-              {/* Card Category Header */}
-              <div className="flex items-center justify-between">
-                <span className={`text-[8px] uppercase font-mono font-bold px-1 py-0.2 rounded border ${categoryStyle.badge}`}>
-                  {categoryStyle.label}
+    return (
+      <div
+        key={card.id}
+        onClick={() => !isLocked && !isQueued && onSelectCard(card)}
+        onMouseEnter={() => setHoveredCardId(card.id)}
+        onMouseLeave={() => setHoveredCardId(null)}
+        className={`relative w-28 h-36 rounded-xl border-2 ${categoryStyle.bg} ${categoryStyle.border} p-2 flex flex-col justify-between cursor-pointer transform transition-all duration-200 select-none shadow-lg ${
+          accordionClass
+        } ${
+          isHovered ? 'z-50 shadow-2xl' : 'z-10'
+        } ${
+          isQueued ? 'opacity-35 grayscale pointer-events-none scale-95' : ''
+        } ${isSelected ? 'ring-2 ring-amber-400 -translate-y-2 shadow-[0_0_20px_rgba(245,158,11,0.7)]' : ''}`}
+      >
+        {/* Floating Full Detail Tooltip */}
+        {isHovered && <CardTooltip card={card} position="top" />}
+
+        {/* Card Category Header */}
+        <div className="flex items-center justify-between gap-1 w-full overflow-hidden">
+          <span className={`text-[7.5px] uppercase font-mono font-bold px-1 py-0.5 rounded border whitespace-nowrap shrink-0 leading-none ${categoryStyle.badge}`}>
+            {isMoveCard ? 'Basic Move' : categoryStyle.label}
+          </span>
+          <span className="text-[7.5px] font-mono text-amber-200/80 whitespace-nowrap shrink-0 leading-none">
+            {card.range === 0 ? 'Self' : `R${card.range}`}
+          </span>
+        </div>
+
+        {/* Central Card Graphic Icon / Sprite */}
+        <div className="flex flex-col items-center my-0.5">
+          <SafeImage
+            src={card.spriteUrl}
+            alt={card.name}
+            className="w-7 h-7 object-contain rounded-lg shadow border border-amber-500/50 mb-0.5"
+            fallback={
+              <div className={`p-1.5 rounded-full bg-slate-950/90 border border-amber-600/40 ${categoryStyle.text} mb-0.5 shadow-inner`}>
+                {renderCardIcon(card.iconName, 'w-4 h-4')}
+              </div>
+            }
+          />
+          <h4 className="text-[10px] font-extrabold text-slate-100 text-center leading-tight tracking-tight">{card.name}</h4>
+        </div>
+
+        {/* Card Facing / Attribute Badge */}
+        <div className="flex items-center justify-center my-0.5">
+          {facingBadge ? (
+            <span className="inline-flex items-center gap-0.5 text-[8px] font-mono font-bold text-amber-300 bg-amber-950/90 px-1.5 py-0.5 rounded-full border border-amber-500/40 whitespace-nowrap shadow-inner">
+              {facingBadge}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-0.5 text-[8px] font-mono text-slate-400 bg-slate-900/60 px-1.5 py-0.5 rounded-full border border-slate-800 whitespace-nowrap">
+              Standard
+            </span>
+          )}
+        </div>
+
+        {/* Card Stats Footer */}
+        <div className="flex items-center justify-center gap-1 border-t border-slate-800/80 pt-1 font-mono">
+          {isMoveCard ? (
+            <span className="text-[8.5px] font-bold text-emerald-400 uppercase tracking-tight">
+              ∞ Unlimited
+            </span>
+          ) : (
+            <>
+              {card.damage && (
+                <span className="text-[9px] font-bold text-rose-400 flex items-center gap-0.5">
+                  <Sword className="w-2 h-2" /> {card.damage}
                 </span>
-                {facingBadge ? (
-                  <span className="text-[7.5px] font-mono font-bold text-amber-300 bg-amber-950/80 px-1 py-0.2 rounded border border-amber-500/40">
-                    {facingBadge}
-                  </span>
-                ) : (
-                  <span className="text-[8px] font-mono text-amber-200/80">R{card.range}</span>
-                )}
-              </div>
-
-              {/* Central Card Graphic Icon / Sprite */}
-              <div className="flex flex-col items-center my-0.5">
-                {card.spriteUrl ? (
-                  <img src={card.spriteUrl} alt={card.name} className="w-7 h-7 object-contain rounded-lg shadow border border-amber-500/50 mb-0.5" />
-                ) : (
-                  <div className={`p-1.5 rounded-full bg-slate-950/90 border border-amber-600/40 ${categoryStyle.text} mb-0.5 shadow-inner`}>
-                    {renderCardIcon(card.iconName, 'w-4 h-4')}
-                  </div>
-                )}
-                <h4 className="text-[10px] font-extrabold text-slate-100 text-center leading-tight tracking-tight">{card.name}</h4>
-              </div>
-
-              {/* Card Description */}
-              <p className="text-[9px] text-slate-300 leading-none text-center line-clamp-2">
-                {card.description}
-              </p>
-
-              {/* Card Stats Footer */}
-              <div className="flex items-center justify-center gap-1 border-t border-slate-800/80 pt-1 font-mono">
-                {card.damage && (
-                  <span className="text-[9px] font-bold text-rose-400 flex items-center gap-0.5">
-                    <Sword className="w-2 h-2" /> {card.damage}
-                  </span>
-                )}
-                {card.shield && (
-                  <span className="text-[9px] font-bold text-sky-400 flex items-center gap-0.5">
-                    <ShieldIcon className="w-2 h-2" /> +{card.shield}
-                  </span>
-                )}
-                {card.healAmount && (
-                  <span className="text-[9px] font-bold text-emerald-400 flex items-center gap-0.5">
-                    <HeartPulse className="w-2 h-2" /> +{card.healAmount}
-                  </span>
-                )}
-              </div>
-
-              {/* Slot Assigned Badge Overlay */}
-              {isQueued && (
-                <div className="absolute inset-0 bg-slate-950/80 rounded-xl flex items-center justify-center font-extrabold text-amber-400 text-[10px] uppercase tracking-wider">
-                  QUEUED
-                </div>
               )}
-            </div>
-          );
-        })}
+              {card.shield && (
+                <span className="text-[9px] font-bold text-sky-400 flex items-center gap-0.5">
+                  <ShieldIcon className="w-2 h-2" /> +{card.shield}
+                </span>
+              )}
+              {card.healAmount && (
+                <span className="text-[9px] font-bold text-emerald-400 flex items-center gap-0.5">
+                  <HeartPulse className="w-2 h-2" /> +{card.healAmount}
+                </span>
+              )}
+              {!card.damage && !card.shield && !card.healAmount && (
+                <span className="text-[8.5px] font-mono text-slate-400">Tactical</span>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Slot Assigned Badge Overlay */}
+        {isQueued && (
+          <div className="absolute inset-0 bg-slate-950/80 rounded-xl flex items-center justify-center font-extrabold text-amber-400 text-[10px] uppercase tracking-wider">
+            QUEUED
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="w-full flex items-center justify-center gap-3 flex-wrap md:flex-nowrap">
+      {/* Move Cards Section (Far Left) */}
+      <div className="flex flex-col items-center gap-1.5 p-2 bg-slate-950/60 rounded-xl border border-emerald-500/30">
+        <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-wider">
+          <Compass className="w-3 h-3 text-emerald-400" />
+          <span>Move Cards</span>
+          <span className="text-[8px] bg-emerald-950 text-emerald-300 border border-emerald-500/40 px-1 rounded-full">
+            ∞ Unlimited
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {DEFAULT_MOVE_CARDS.map((card, index) => renderCardItem(card, true, index))}
+        </div>
+      </div>
+
+      {/* Vertical Separator */}
+      <div className="hidden md:block w-px h-36 bg-gradient-to-b from-transparent via-amber-600/40 to-transparent" />
+
+      {/* Ability Cards Section (Center) */}
+      <div className="flex flex-col items-center gap-1.5 p-2 bg-slate-950/60 rounded-xl border border-amber-500/30">
+        <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider">
+          <Sparkle className="w-3 h-3 text-amber-400" />
+          <span>Ability Cards</span>
+          <span className="text-[8px] bg-amber-950 text-amber-300 border border-amber-500/40 px-1 rounded-full">
+            5 Active
+          </span>
+        </div>
+        <div className="flex items-center">
+          {hand.map((card, index) => renderCardItem(card, false, index))}
+        </div>
       </div>
     </div>
   );
 };
+

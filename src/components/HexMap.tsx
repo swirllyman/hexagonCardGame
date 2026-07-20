@@ -30,6 +30,57 @@ function getHexPolygonPoints(center: { x: number; y: number }, radius: number): 
   return points.join(' ');
 }
 
+function getArcAngles(fromFacing: number, toFacing: number, turnAmount?: number): { startAngle: number; endAngle: number; isClockwise: boolean } {
+  const normFrom = ((fromFacing % 6) + 6) % 6;
+  const normTo = ((toFacing % 6) + 6) % 6;
+
+  let isClockwise = true;
+  if (turnAmount !== undefined) {
+    isClockwise = turnAmount > 0;
+  } else {
+    isClockwise = (normFrom + 1) % 6 === normTo;
+  }
+
+  let startAngle = normFrom * 60;
+  let endAngle = normTo * 60;
+
+  if (isClockwise) {
+    if (endAngle <= startAngle) {
+      endAngle += 360;
+    }
+  } else {
+    if (endAngle >= startAngle) {
+      endAngle -= 360;
+    }
+  }
+
+  return { startAngle, endAngle, isClockwise };
+}
+
+function describeSvgArc(
+  cx: number, 
+  cy: number, 
+  r: number, 
+  startAngleDeg: number, 
+  endAngleDeg: number, 
+  isClockwise: boolean
+): string {
+  const startRad = (Math.PI / 180) * startAngleDeg;
+  const endRad = (Math.PI / 180) * endAngleDeg;
+
+  const x1 = cx + r * Math.cos(startRad);
+  const y1 = cy + r * Math.sin(startRad);
+  const x2 = cx + r * Math.cos(endRad);
+  const y2 = cy + r * Math.sin(endRad);
+
+  const sweepFlag = isClockwise ? 1 : 0;
+  const angleDiff = Math.abs(endAngleDeg - startAngleDeg);
+  const largeArcFlag = angleDiff > 180 ? 1 : 0;
+
+  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArcFlag} ${sweepFlag} ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+}
+
+
 export const HexMap: React.FC<HexMapProps> = ({
   hexGrid,
   players,
@@ -130,14 +181,84 @@ export const HexMap: React.FC<HexMapProps> = ({
                 </g>
               )}
 
-              {/* Powerup Rune Vector Glyph */}
-              {tile.terrain === 'rune' && !occupant && (
-                <g transform={`translate(${pixel.x - 10}, ${pixel.y - 10})`} className="pointer-events-none" filter="url(#runeGlowFilter)">
-                  {tile.runeEffect === 'heal' && <Heart className="w-5 h-5 text-emerald-400 animate-pulse" />}
-                  {tile.runeEffect === 'shield' && <Shield className="w-5 h-5 text-sky-400 animate-pulse" />}
-                  {tile.runeEffect === 'attackBoost' && <Flame className="w-5 h-5 text-amber-400 animate-pulse" />}
-                </g>
-              )}
+              {/* Powerup Rune Pickups & Border Cooldown Pips */}
+              {tile.terrain === 'rune' && (() => {
+                const maxCd = tile.maxRuneCooldown || 3;
+                const cd = tile.runeCooldown || 0;
+                const isReady = cd === 0;
+
+                let accentColor = '#f59e0b';
+                let IconComponent = Flame;
+                let iconClass = 'text-amber-400';
+
+                if (tile.runeEffect === 'heal') {
+                  accentColor = '#10b981';
+                  IconComponent = Heart;
+                  iconClass = 'text-emerald-400';
+                } else if (tile.runeEffect === 'shield') {
+                  accentColor = '#38bdf8';
+                  IconComponent = Shield;
+                  iconClass = 'text-sky-400';
+                }
+
+                // Calculate Pip Positions around hex border
+                const pipRadius = HEX_RADIUS - 5;
+                const pips = [];
+                for (let i = 0; i < maxCd; i++) {
+                  const angleRad = -Math.PI / 2 + (i * 2 * Math.PI / maxCd);
+                  const px = pixel.x + pipRadius * Math.cos(angleRad);
+                  const py = pixel.y + pipRadius * Math.sin(angleRad);
+                  const isPipLit = isReady || (i < cd);
+
+                  pips.push(
+                    <g key={`pip-${i}`}>
+                      <circle
+                        cx={px}
+                        cy={py}
+                        r={isReady ? 3.5 : 2.8}
+                        fill={isPipLit ? accentColor : '#1e293b'}
+                        fillOpacity={isPipLit ? (isReady ? 0.95 : 0.8) : 0.3}
+                        stroke={isPipLit ? (isReady ? '#fef08a' : accentColor) : '#475569'}
+                        strokeWidth={isReady ? 1.2 : 0.8}
+                        className={isReady ? 'animate-pulse' : ''}
+                      />
+                    </g>
+                  );
+                }
+
+                return (
+                  <g className="pointer-events-none">
+                    {/* Render Hex Border Cooldown Pips */}
+                    {pips}
+
+                    {/* Center Pickup Icon or Cooldown Countdown */}
+                    {!occupant && (
+                      <g transform={`translate(${pixel.x}, ${pixel.y})`}>
+                        {isReady ? (
+                          <g transform="translate(-10, -10)" filter="url(#runeGlowFilter)">
+                            <IconComponent className={`w-5 h-5 ${iconClass} animate-pulse`} />
+                          </g>
+                        ) : (
+                          <g className="flex flex-col items-center justify-center">
+                            <g transform="translate(-7, -11)" className="opacity-30">
+                              <IconComponent className={`w-3.5 h-3.5 ${iconClass}`} />
+                            </g>
+                            <circle cx={0} cy={2} r={7.5} fill="#090d16" stroke={accentColor} strokeWidth="1.2" opacity="0.95" />
+                            <text
+                              x={0}
+                              y={5}
+                              textAnchor="middle"
+                              className="fill-amber-300 text-[9px] font-extrabold font-mono select-none"
+                            >
+                              {cd}
+                            </text>
+                          </g>
+                        )}
+                      </g>
+                    )}
+                  </g>
+                );
+              })()}
 
               {/* Axial Coordinates Overlay */}
               <text
@@ -194,34 +315,80 @@ export const HexMap: React.FC<HexMapProps> = ({
 
           const isMove = intent.type === 'movement';
           const isAttack = intent.type === 'attack';
+          const isTurn = isMove && intent.fromFacing !== intent.toFacing;
           const strokeColor = intent.playerId === 'player1' ? '#f59e0b' : '#38bdf8';
 
           return (
             <g key={`intent-${intent.playerId}-${intent.slotIndex}-${idx}`} className="pointer-events-none">
-              {/* Dashed Trajectory Line for Movement */}
-              {isMove && !hexEquals(intent.fromCoord, intent.toCoord) && (
-                <>
-                  <line
-                    x1={fromPx.x}
-                    y1={fromPx.y}
-                    x2={toPx.x}
-                    y2={toPx.y}
-                    stroke={strokeColor}
-                    strokeWidth="2.5"
-                    strokeDasharray="5,4"
-                    strokeLinecap="round"
-                    opacity="0.8"
-                  />
-                  {/* Projected Destination Arrow Marker */}
-                  <g transform={`translate(${toPx.x}, ${toPx.y}) rotate(${getFacingAngle(intent.toFacing)})`}>
-                    <polygon
-                      points="12,-5 22,0 12,5"
-                      fill={strokeColor}
-                      fillOpacity="0.9"
+              {/* Dashed Trajectory Line for Linear Movement */}
+              {isMove && !hexEquals(intent.fromCoord, intent.toCoord) && (() => {
+                const prevIntent = projectedIntents.find(p => p.playerId === intent.playerId && p.slotIndex === intent.slotIndex - 1);
+                let lineStartX = fromPx.x;
+                let lineStartY = fromPx.y;
+
+                if (prevIntent && prevIntent.fromFacing !== prevIntent.toFacing && hexEquals(prevIntent.toCoord, intent.fromCoord)) {
+                  const { endAngle } = getArcAngles(prevIntent.fromFacing, prevIntent.toFacing, prevIntent.card.turnAmount);
+                  const endRad = (Math.PI / 180) * endAngle;
+                  lineStartX = fromPx.x + 20 * Math.cos(endRad);
+                  lineStartY = fromPx.y + 20 * Math.sin(endRad);
+                }
+
+                return (
+                  <>
+                    <line
+                      x1={lineStartX}
+                      y1={lineStartY}
+                      x2={toPx.x}
+                      y2={toPx.y}
+                      stroke={strokeColor}
+                      strokeWidth="2.5"
+                      strokeDasharray="5,4"
+                      strokeLinecap="round"
+                      opacity="0.8"
                     />
+                    {/* Projected Destination Arrow Marker */}
+                    <g transform={`translate(${toPx.x}, ${toPx.y}) rotate(${getFacingAngle(intent.toFacing)})`}>
+                      <polygon
+                        points="12,-5 22,0 12,5"
+                        fill={strokeColor}
+                        fillOpacity="0.9"
+                      />
+                    </g>
+                  </>
+                );
+              })()}
+
+              {/* Curved Rotation Arc Indicator for Turn Actions */}
+              {isTurn && (() => {
+                const { startAngle, endAngle, isClockwise } = getArcAngles(intent.fromFacing, intent.toFacing, intent.card.turnAmount);
+                const arcPath = describeSvgArc(toPx.x, toPx.y, 20, startAngle, endAngle, isClockwise);
+                const endRad = (Math.PI / 180) * endAngle;
+                const tipX = toPx.x + 20 * Math.cos(endRad);
+                const tipY = toPx.y + 20 * Math.sin(endRad);
+                const tipFacingAngle = getFacingAngle(intent.toFacing);
+
+                return (
+                  <g key={`turn-arc-${idx}`}>
+                    {/* Glowing Curved Rotation Arc */}
+                    <path
+                      d={arcPath}
+                      fill="none"
+                      stroke={strokeColor}
+                      strokeWidth="2.5"
+                      strokeDasharray="4,2"
+                      opacity="0.95"
+                    />
+                    {/* Arrowhead at end of Arc pointing in new facing direction */}
+                    <g transform={`translate(${tipX}, ${tipY}) rotate(${tipFacingAngle})`}>
+                      <polygon
+                        points="0,-4 10,0 0,4"
+                        fill={strokeColor}
+                        fillOpacity="1"
+                      />
+                    </g>
                   </g>
-                </>
-              )}
+                );
+              })()}
 
               {/* Target Hex Highlight for Attacks */}
               {isAttack && intent.targetCoords.map((tCoord, tIdx) => {
@@ -242,13 +409,13 @@ export const HexMap: React.FC<HexMapProps> = ({
                 );
               })}
 
-              {/* Slot Badge Marker at Movement Target */}
+              {/* Slot Badge Marker at Movement / Turn Location */}
               {isMove && (
-                <g transform={`translate(${toPx.x}, ${toPx.y - 20})`}>
+                <g transform={`translate(${toPx.x}, ${toPx.y - (isTurn ? 24 : 20)})`}>
                   <rect
-                    x="-10"
+                    x={isTurn ? "-14" : "-10"}
                     y="-7"
-                    width="20"
+                    width={isTurn ? "28" : "20"}
                     height="14"
                     rx="4"
                     fill="#090d16"
@@ -264,7 +431,7 @@ export const HexMap: React.FC<HexMapProps> = ({
                     fontWeight="bold"
                     fontFamily="monospace"
                   >
-                    S{intent.slotIndex + 1}
+                    S{intent.slotIndex + 1}{isTurn ? (intent.card.turnAmount && intent.card.turnAmount > 0 ? ' ↻' : ' ↺') : ''}
                   </text>
                 </g>
               )}

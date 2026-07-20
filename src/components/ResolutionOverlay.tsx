@@ -6,6 +6,7 @@ interface ResolutionOverlayProps {
   resolvingTurnOrder: number;
   isAutoPlay: boolean;
   playSpeed: number;
+  totalSlots?: number;
   onExecuteStep: () => void;
   onToggleAutoPlay: () => void;
   onChangeSpeed: (speed: number) => void;
@@ -16,6 +17,7 @@ export const ResolutionOverlay: React.FC<ResolutionOverlayProps> = ({
   resolvingTurnOrder,
   isAutoPlay,
   playSpeed,
+  totalSlots = 3,
   onExecuteStep,
   onToggleAutoPlay,
   onChangeSpeed,
@@ -26,7 +28,7 @@ export const ResolutionOverlay: React.FC<ResolutionOverlayProps> = ({
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
           <h3 className="text-xs font-black uppercase tracking-wider gold-gradient-text">
-            Resolving Slot {currentSlotIndex + 1} of 3
+            Resolving Slot {currentSlotIndex + 1} of {totalSlots}
           </h3>
         </div>
         <span className="text-[10px] font-mono text-amber-200/70">Turn Step #{resolvingTurnOrder + 1}</span>

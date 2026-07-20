@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.4" />
+      <stop offset="70%" stop-color="#0369a1" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#090d16" stop-opacity="0.95" />
+    </radialGradient>
+    <linearGradient id="strokeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#bae6fd" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <circle cx="256" cy="256" r="236" fill="url(#bgGlow)" stroke="url(#strokeGrad)" stroke-width="12" />
+  <circle cx="256" cy="256" r="210" fill="none" stroke="#e0f2fe" stroke-opacity="0.25" stroke-width="4" stroke-dasharray="12 8" />
+
+  <!-- Azure Shield Crest -->
+  <g filter="url(#glow)">
+    <path d="M 256 120 L 370 160 C 370 290 290 370 256 400 C 222 370 142 290 142 160 Z" fill="none" stroke="url(#strokeGrad)" stroke-width="24" stroke-linejoin="round" />
+    <polygon points="256,180 276,240 336,240 286,276 306,336 256,300 206,336 226,276 176,240 236,240" fill="#fef3c7" />
+  </g>
+</svg>

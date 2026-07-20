@@ -26,6 +26,20 @@ export function hexDistance(a: AxialCoord, b: AxialCoord): number {
   return (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(sa - sb)) / 2;
 }
 
+export function isValidGridCoord(coord: AxialCoord, mapRadius: number = 4): boolean {
+  return hexDistance({ q: 0, r: 0 }, coord) <= mapRadius;
+}
+
+export function getTurnDirectionTowards(currentFacing: number, targetFacing: number): 'pivot_left' | 'pivot_right' | 'none' {
+  const normCurrent = normalizeFacing(currentFacing);
+  const normTarget = normalizeFacing(targetFacing);
+  if (normCurrent === normTarget) return 'none';
+  const rightDist = (normTarget - normCurrent + 6) % 6;
+  const leftDist = (normCurrent - normTarget + 6) % 6;
+  return rightDist <= leftDist ? 'pivot_right' : 'pivot_left';
+}
+
+
 export function hexAdd(a: AxialCoord, b: AxialCoord): AxialCoord {
   return { q: a.q + b.q, r: a.r + b.r };
 }
@@ -181,19 +195,25 @@ export function generateHexGrid(mapRadius: number = 4): HexTile[] {
 
       let terrain: 'flat' | 'obstacle' | 'rune' = 'flat';
       let runeEffect: 'heal' | 'shield' | 'attackBoost' | undefined;
+      let runeCooldown: number | undefined;
+      let maxRuneCooldown: number | undefined;
 
       // Place central rune and obstacle pillars for tactical play
       if (distFromCenter === 0) {
         terrain = 'rune';
         runeEffect = 'attackBoost';
+        runeCooldown = 0;
+        maxRuneCooldown = 3;
       } else if (distFromCenter === 2 && (q === 0 || r === 0 || q + r === 0)) {
         terrain = 'rune';
         runeEffect = Math.abs(q) === 2 ? 'heal' : 'shield';
+        runeCooldown = 0;
+        maxRuneCooldown = 3;
       } else if (distFromCenter === 3 && (q === 1 || q === -1) && (r === 2 || r === -2)) {
         terrain = 'obstacle';
       }
 
-      tiles.push({ coord, terrain, runeEffect });
+      tiles.push({ coord, terrain, runeEffect, runeCooldown, maxRuneCooldown });
     }
   }
 

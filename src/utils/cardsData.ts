@@ -9,7 +9,7 @@ export const STANDARD_DECK: Omit<Card, 'id'>[] = [
     range: 1,
     facingMoveType: 'forward',
     iconName: 'Footprints',
-    spriteUrl: '/sprites/card_icon_move1.png',
+    spriteUrl: 'sprites/card_icon_move1.png',
   },
   {
     type: 'move2',
@@ -19,7 +19,7 @@ export const STANDARD_DECK: Omit<Card, 'id'>[] = [
     range: 2,
     facingMoveType: 'sprint',
     iconName: 'Zap',
-    spriteUrl: '/sprites/card_icon_move2.png',
+    spriteUrl: 'sprites/card_icon_move2.png',
   },
   {
     type: 'sidestep',
@@ -29,7 +29,7 @@ export const STANDARD_DECK: Omit<Card, 'id'>[] = [
     range: 1,
     facingMoveType: 'sidestep_right',
     iconName: 'Move',
-    spriteUrl: '/sprites/card_icon_sidestep.png',
+    spriteUrl: 'sprites/card_icon_sidestep.png',
   },
   {
     type: 'pivot_left',
@@ -40,6 +40,7 @@ export const STANDARD_DECK: Omit<Card, 'id'>[] = [
     facingMoveType: 'pivot_left',
     turnAmount: -1,
     iconName: 'RotateCw',
+    spriteUrl: 'sprites/card_icon_pivot_left.png',
   },
   {
     type: 'pivot_right',
@@ -50,6 +51,7 @@ export const STANDARD_DECK: Omit<Card, 'id'>[] = [
     facingMoveType: 'pivot_right',
     turnAmount: 1,
     iconName: 'RotateCw',
+    spriteUrl: 'sprites/card_icon_pivot_right.svg',
   },
   {
     type: 'backstep',
@@ -59,6 +61,7 @@ export const STANDARD_DECK: Omit<Card, 'id'>[] = [
     range: 1,
     facingMoveType: 'backstep',
     iconName: 'Footprints',
+    spriteUrl: 'sprites/card_icon_backstep.svg',
   },
   {
     type: 'melee',
@@ -69,7 +72,7 @@ export const STANDARD_DECK: Omit<Card, 'id'>[] = [
     damage: 25,
     facingAttackType: 'frontal',
     iconName: 'Sword',
-    spriteUrl: '/sprites/card_icon_melee.png',
+    spriteUrl: 'sprites/card_icon_melee.png',
   },
   {
     type: 'heavy',
@@ -81,7 +84,7 @@ export const STANDARD_DECK: Omit<Card, 'id'>[] = [
     pushDist: 1,
     facingAttackType: 'frontal',
     iconName: 'Hammer',
-    spriteUrl: '/sprites/card_icon_heavy.png',
+    spriteUrl: 'sprites/card_icon_heavy.png',
   },
   {
     type: 'fireball',
@@ -92,7 +95,7 @@ export const STANDARD_DECK: Omit<Card, 'id'>[] = [
     damage: 22,
     facingAttackType: 'line',
     iconName: 'Flame',
-    spriteUrl: '/sprites/card_icon_fireball.png',
+    spriteUrl: 'sprites/card_icon_fireball.png',
   },
   {
     type: 'whirlwind',
@@ -103,7 +106,7 @@ export const STANDARD_DECK: Omit<Card, 'id'>[] = [
     damage: 16,
     facingAttackType: 'aoe',
     iconName: 'RotateCw',
-    spriteUrl: '/sprites/card_icon_whirlwind.png',
+    spriteUrl: 'sprites/card_icon_whirlwind.png',
   },
   {
     type: 'shield',
@@ -113,7 +116,7 @@ export const STANDARD_DECK: Omit<Card, 'id'>[] = [
     range: 0,
     shield: 30,
     iconName: 'Shield',
-    spriteUrl: '/sprites/card_icon_shield.png',
+    spriteUrl: 'sprites/card_icon_shield.png',
   },
   {
     type: 'push',
@@ -124,7 +127,7 @@ export const STANDARD_DECK: Omit<Card, 'id'>[] = [
     pushDist: 2,
     facingAttackType: 'frontal',
     iconName: 'Wind',
-    spriteUrl: '/sprites/card_icon_push.png',
+    spriteUrl: 'sprites/card_icon_push.png',
   },
   {
     type: 'teleport',
@@ -134,7 +137,7 @@ export const STANDARD_DECK: Omit<Card, 'id'>[] = [
     range: 2,
     facingMoveType: 'sprint',
     iconName: 'Sparkles',
-    spriteUrl: '/sprites/card_icon_teleport.png',
+    spriteUrl: 'sprites/card_icon_teleport.png',
   },
   {
     type: 'counter',
@@ -144,7 +147,7 @@ export const STANDARD_DECK: Omit<Card, 'id'>[] = [
     range: 0,
     damage: 25,
     iconName: 'ShieldAlert',
-    spriteUrl: '/sprites/card_icon_counter.png',
+    spriteUrl: 'sprites/card_icon_counter.png',
   },
   {
     type: 'meditate',
@@ -154,7 +157,45 @@ export const STANDARD_DECK: Omit<Card, 'id'>[] = [
     range: 0,
     healAmount: 20,
     iconName: 'HeartPulse',
-    spriteUrl: '/sprites/card_icon_meditate.png',
+    spriteUrl: 'sprites/card_icon_meditate.png',
+  },
+];
+
+export const DEFAULT_MOVE_CARDS: Card[] = [
+  {
+    id: 'move-fixed',
+    type: 'move1',
+    name: 'Move',
+    description: 'Step 1 hex straight ahead in your facing direction.',
+    category: 'movement',
+    range: 1,
+    facingMoveType: 'forward',
+    iconName: 'Footprints',
+    spriteUrl: 'sprites/card_icon_move1.png',
+  },
+  {
+    id: 'pivot-left-fixed',
+    type: 'pivot_left',
+    name: 'Turn Left',
+    description: 'Rotate your unit 60° left (counter-clockwise).',
+    category: 'movement',
+    range: 0,
+    facingMoveType: 'pivot_left',
+    turnAmount: -1,
+    iconName: 'RotateCw',
+    spriteUrl: 'sprites/card_icon_pivot_left.png',
+  },
+  {
+    id: 'pivot-right-fixed',
+    type: 'pivot_right',
+    name: 'Turn Right',
+    description: 'Rotate your unit 60° right (clockwise).',
+    category: 'movement',
+    range: 0,
+    facingMoveType: 'pivot_right',
+    turnAmount: 1,
+    iconName: 'RotateCw',
+    spriteUrl: 'sprites/card_icon_pivot_right.svg',
   },
 ];
 
@@ -173,3 +214,4 @@ export function createStandardPlayerDeck(): Card[] {
     id: `${template.type}-${idx}-${Math.random().toString(36).substring(2, 7)}`,
   }));
 }
+

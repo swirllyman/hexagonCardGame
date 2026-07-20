@@ -17,6 +17,7 @@ export function App() {
   const {
     gamePhase,
     round,
+    actionsPerRound,
     currentSlotIndex,
     priorityPlayerIdx,
     resolvingTurnOrder,
@@ -66,24 +67,24 @@ export function App() {
   return (
     <div className="h-screen w-screen max-h-screen max-w-screen overflow-hidden text-slate-100 flex flex-col p-2 font-sans select-none">
       {/* Compact Top Header Bar */}
-      <header className="h-11 flex-shrink-0 w-full flex items-center justify-between px-3 fantasy-panel rounded-xl backdrop-blur-md shadow-md mb-2 border border-amber-600/30">
-        <div className="flex items-center gap-2.5">
-          <div className="p-1.5 bg-amber-500/10 border border-amber-500/40 rounded-lg text-amber-400">
+      <header className="h-11 flex-shrink-0 w-full flex items-center justify-between px-3 fantasy-panel rounded-xl backdrop-blur-md shadow-md mb-1.5 border border-amber-600/30">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="p-1.5 bg-amber-500/10 border border-amber-500/40 rounded-lg text-amber-400 flex-shrink-0">
             <Swords className="w-4 h-4" />
           </div>
-          <div>
-            <h1 className="text-xs font-black tracking-tight leading-none gold-gradient-text flex items-center gap-1.5">
-              HEX CLASH <span className="text-amber-200/80 font-mono text-[10px] font-normal">Tactical Command</span>
+          <div className="flex-shrink-0">
+            <h1 className="text-xs font-black tracking-tight leading-none gold-gradient-text flex items-center gap-1.5 whitespace-nowrap">
+              HEX CLASH <span className="text-amber-200/80 font-mono text-[10px] font-normal hidden sm:inline">Tactical Command</span>
             </h1>
           </div>
 
-          <span className="text-[10px] font-mono text-amber-200/90 bg-slate-950 px-2.5 py-0.5 rounded-full border border-amber-600/40">
+          <span className="text-[10px] font-mono text-amber-200/90 bg-slate-950 px-2.5 py-0.5 rounded-full border border-amber-600/40 whitespace-nowrap flex-shrink-0">
             Round {round} — {gamePhase === 'planning' ? 'Planning Phase' : gamePhase === 'resolving' ? 'Resolution Phase' : 'Arena Setup'}
           </span>
 
           {/* Multiplayer Room Badge */}
           {multiplayer.role !== 'single' && multiplayer.roomCode && (
-            <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-500/10 border border-amber-500/40 rounded-full font-mono text-[10px] text-amber-300">
+            <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-500/10 border border-amber-500/40 rounded-full font-mono text-[10px] text-amber-300 whitespace-nowrap flex-shrink-0">
               <Globe className="w-3 h-3 text-amber-400" />
               <span>ROOM: {multiplayer.roomCode}</span>
             </div>
@@ -179,94 +180,109 @@ export function App() {
           />
         </div>
       ) : (
-        <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
-          {/* Top Arena Dashboard & Battlefield */}
-          <div className="flex-1 min-h-0 grid grid-cols-12 gap-2 overflow-hidden">
-            {/* Left 9 Cols: Player Status + Hex Canvas */}
-            <div className="col-span-12 lg:col-span-9 flex flex-col h-full min-h-0 overflow-hidden gap-2">
-              {/* 4 Player Status Bar */}
-              <div className="flex-shrink-0">
-                <PlayerStatusPanel
-                  players={players}
-                  priorityPlayerIdx={priorityPlayerIdx}
-                  currentSlotIndex={currentSlotIndex}
-                  gamePhase={gamePhase}
-                  localPlayerId={multiplayer.localPlayerId}
-                />
-              </div>
-
-              {/* Center Interactive SVG Hexagon Battlefield */}
-              <div className="flex-1 min-h-0 w-full overflow-hidden">
-                <HexMap
-                  hexGrid={hexGrid}
-                  players={players}
-                  hoveredHex={hoveredHex}
-                  selectedCard={selectedHandCard}
-                  currentActorId={
-                    gamePhase === 'resolving'
-                      ? players[(priorityPlayerIdx + resolvingTurnOrder) % players.length]?.id
-                      : undefined
-                  }
-                  currentAnimation={currentAnimation}
-                  projectedIntents={projectedIntents}
-                  onHexHover={setHoveredHex}
-                  onHexClick={() => {}}
-                />
-              </div>
-            </div>
-
-            {/* Right 3 Cols: Battle Log Sidebar */}
-            <div className="hidden lg:flex lg:col-span-3 h-full min-h-0 flex-col overflow-hidden">
-              <BattleLog logs={battleLog} />
-            </div>
+        <div className="flex-1 min-h-0 flex gap-2 overflow-hidden">
+          {/* Left: Vertical Player Status Column - spans full height including dock */}
+          <div className="hidden lg:flex flex-col w-56 flex-shrink-0 h-full min-h-0 overflow-hidden">
+            <PlayerStatusPanel
+              players={players}
+              priorityPlayerIdx={priorityPlayerIdx}
+              currentSlotIndex={currentSlotIndex}
+              gamePhase={gamePhase}
+              localPlayerId={multiplayer.localPlayerId}
+              vertical
+            />
           </div>
 
-          {/* Bottom Dock Control Panel */}
-          <div className="relative z-40 flex-shrink-0 w-full fantasy-panel border border-amber-600/40 rounded-xl p-2 flex flex-col md:flex-row items-center justify-between gap-3 shadow-2xl backdrop-blur-md">
-            {gamePhase === 'planning' && controlledPlayer && (
-              <>
-                <div className="w-full md:w-80 flex-shrink-0">
-                  <ActionQueue
-                    programmedQueue={controlledPlayer.programmedQueue}
-                    selectedCard={selectedHandCard}
-                    isLocked={controlledPlayer.isLocked}
-                    onAssignSlot={(slotIdx, card) => assignCardToSlot(slotIdx, card, controlledPlayer.id)}
-                    onUnassignSlot={(slotIdx) => unassignSlot(slotIdx, controlledPlayer.id)}
-                    onLockIn={() => lockInPlanning(controlledPlayer.id)}
+          {/* Right side: Hex Map + Battle Log + Bottom Dock */}
+          <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
+            {/* Hex Map + Battle Log */}
+            <div className="flex-1 min-h-0 grid grid-cols-12 gap-2 overflow-hidden">
+              {/* Hex Canvas */}
+              <div className="col-span-12 lg:col-span-9 flex flex-col h-full min-h-0 overflow-hidden">
+                {/* Mobile: Player Status Bar (shown only on smaller screens) */}
+                <div className="flex-shrink-0 lg:hidden">
+                  <PlayerStatusPanel
+                    players={players}
+                    priorityPlayerIdx={priorityPlayerIdx}
+                    currentSlotIndex={currentSlotIndex}
+                    gamePhase={gamePhase}
+                    localPlayerId={multiplayer.localPlayerId}
                   />
                 </div>
 
-                <div className="w-full flex-1 min-w-0">
-                  <CardHand
-                    hand={controlledPlayer.hand}
-                    programmedQueue={controlledPlayer.programmedQueue}
+                <div className="flex-1 min-h-0 w-full overflow-hidden">
+                  <HexMap
+                    hexGrid={hexGrid}
+                    players={players}
+                    hoveredHex={hoveredHex}
                     selectedCard={selectedHandCard}
-                    isLocked={controlledPlayer.isLocked}
-                    onSelectCard={(card) => {
-                      if (selectedHandCard?.id === card.id) {
-                        setSelectedHandCard(null);
-                      } else {
-                        setSelectedHandCard(card);
-                      }
-                    }}
+                    currentActorId={
+                      gamePhase === 'resolving'
+                        ? players[(priorityPlayerIdx + resolvingTurnOrder) % players.length]?.id
+                        : undefined
+                    }
+                    currentAnimation={currentAnimation}
+                    projectedIntents={projectedIntents}
+                    onHexHover={setHoveredHex}
+                    onHexClick={() => {}}
                   />
                 </div>
-              </>
-            )}
-
-            {gamePhase === 'resolving' && (
-              <div className="w-full flex justify-center">
-                <ResolutionOverlay
-                  currentSlotIndex={currentSlotIndex}
-                  resolvingTurnOrder={resolvingTurnOrder}
-                  isAutoPlay={isAutoPlay}
-                  playSpeed={playSpeed}
-                  onExecuteStep={executeNextStep}
-                  onToggleAutoPlay={() => setIsAutoPlay(!isAutoPlay)}
-                  onChangeSpeed={setPlaySpeed}
-                />
               </div>
-            )}
+
+              {/* Right 3 Cols: Battle Log Sidebar */}
+              <div className="hidden lg:flex lg:col-span-3 h-full min-h-0 flex-col overflow-hidden">
+                <BattleLog logs={battleLog} />
+              </div>
+            </div>
+
+            {/* Bottom Dock Control Panel */}
+            <div className="relative z-40 flex-shrink-0 w-full fantasy-panel border border-amber-600/40 rounded-xl p-2 flex flex-col md:flex-row items-center justify-between gap-3 shadow-2xl backdrop-blur-md">
+              {gamePhase === 'planning' && controlledPlayer && (
+                <>
+                  <div className="w-full flex-1 min-w-0">
+                    <CardHand
+                      hand={controlledPlayer.hand}
+                      programmedQueue={controlledPlayer.programmedQueue}
+                      selectedCard={selectedHandCard}
+                      isLocked={controlledPlayer.isLocked}
+                      onSelectCard={(card) => {
+                        if (selectedHandCard?.id === card.id) {
+                          setSelectedHandCard(null);
+                        } else {
+                          setSelectedHandCard(card);
+                        }
+                      }}
+                    />
+                  </div>
+
+                  <div className={`w-full ${actionsPerRound > 5 ? 'md:w-[420px]' : actionsPerRound === 5 ? 'md:w-[360px]' : 'md:w-80'} flex-shrink-0`}>
+                    <ActionQueue
+                      programmedQueue={controlledPlayer.programmedQueue}
+                      selectedCard={selectedHandCard}
+                      isLocked={controlledPlayer.isLocked}
+                      onAssignSlot={(slotIdx, card) => assignCardToSlot(slotIdx, card, controlledPlayer.id)}
+                      onUnassignSlot={(slotIdx) => unassignSlot(slotIdx, controlledPlayer.id)}
+                      onLockIn={() => lockInPlanning(controlledPlayer.id)}
+                    />
+                  </div>
+                </>
+              )}
+
+              {gamePhase === 'resolving' && (
+                <div className="w-full flex justify-center">
+                  <ResolutionOverlay
+                    currentSlotIndex={currentSlotIndex}
+                    resolvingTurnOrder={resolvingTurnOrder}
+                    isAutoPlay={isAutoPlay}
+                    playSpeed={playSpeed}
+                    totalSlots={actionsPerRound}
+                    onExecuteStep={executeNextStep}
+                    onToggleAutoPlay={() => setIsAutoPlay(!isAutoPlay)}
+                    onChangeSpeed={setPlaySpeed}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

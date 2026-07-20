@@ -17,9 +17,9 @@ import {
   hexEquals, 
   getRelativeHex,
   rotateFacing,
-  getFrontalTargetHexes
+  getFrontalTargetHexes,
 } from '../utils/hexGrid';
-import { createStandardPlayerDeck, shuffleDeck } from '../utils/cardsData';
+import { createStandardPlayerDeck, shuffleDeck, DEFAULT_MOVE_CARDS } from '../utils/cardsData';
 import { programAiTurn } from '../utils/aiEngine';
 import { sound } from '../utils/sound';
 import { multiplayerService } from '../services/multiplayerService';
@@ -29,6 +29,7 @@ export interface SetupPlayerOption {
   name: string;
   isAi: boolean;
   aiDifficulty: 'easy' | 'medium' | 'hard';
+  avatarUrl?: string;
 }
 
 const FACTION_MAPPING = {
@@ -41,11 +42,13 @@ const FACTION_MAPPING = {
 export function useGameState() {
   const [gamePhase, setGamePhase] = useState<GamePhase>('setup');
   const [round, setRound] = useState<number>(1);
+  const [actionsPerRound, setActionsPerRound] = useState<number>(3);
   const [currentSlotIndex, setCurrentSlotIndex] = useState<number>(0);
   const [priorityPlayerIdx, setPriorityPlayerIdx] = useState<number>(0);
   const [resolvingTurnOrder, setResolvingTurnOrder] = useState<number>(0);
 
   const [players, setPlayers] = useState<PlayerState[]>([]);
+  const [roundStartStates, setRoundStartStates] = useState<Record<PlayerId, { coord: AxialCoord; facing: number }>>({});
   const [hexGrid, setHexGrid] = useState<HexTile[]>([]);
   const [battleLog, setBattleLog] = useState<BattleLogEntry[]>([]);
   
@@ -74,9 +77,10 @@ export function useGameState() {
   }, [round, gamePhase, currentSlotIndex]);
 
   // Start new match
-  const initGame = useCallback((setupOptions: SetupPlayerOption[]) => {
+  const initGame = useCallback((setupOptions: SetupPlayerOption[], actionsCount: number = 3) => {
     const grid = generateHexGrid(4);
     setHexGrid(grid);
+    setActionsPerRound(actionsCount);
 
     const startPos = getStartingPositions(4);
 
@@ -92,21 +96,30 @@ export function useGameState() {
         isAi: opt.isAi,
         aiDifficulty: opt.aiDifficulty,
         faction: FACTION_MAPPING[opt.id],
+        avatarUrl: opt.avatarUrl,
         hp: 100,
         maxHp: 100,
         shield: 0,
         coord: startPos[opt.id].coord,
         facing: startPos[opt.id].facing,
+        roundStartCoord: startPos[opt.id].coord,
+        roundStartFacing: startPos[opt.id].facing,
         hand,
         drawPile,
         discardPile: [],
-        programmedQueue: [null, null, null],
+        programmedQueue: Array(actionsCount).fill(null),
         isLocked: false,
         isEliminated: false,
         kills: 0,
         damageDealt: 0,
       };
     });
+
+    const initialStates = setupOptions.reduce((acc, opt) => {
+      acc[opt.id] = { coord: startPos[opt.id].coord, facing: startPos[opt.id].facing };
+      return acc;
+    }, {} as Record<PlayerId, { coord: AxialCoord; facing: number }>);
+    setRoundStartStates(initialStates);
 
     setPlayers(initialPlayers);
     setRound(1);
@@ -118,7 +131,7 @@ export function useGameState() {
     setBattleLog([]);
     setGamePhase('planning');
 
-    addLog('Match Started! 4 Commanders enter the hexagonal arena.', 'system');
+    addLog(`Match Started! 4 Commanders enter the arena with ${actionsCount} actions per round.`, 'system');
 
     // Broadcast game start if Host
     if (multiplayerService.isHost) {
@@ -129,6 +142,7 @@ export function useGameState() {
           players: initialPlayers,
           hexGrid: grid,
           round: 1,
+          actionsPerRound: actionsCount,
           gamePhase: 'planning',
         },
       });
@@ -145,17 +159,32 @@ export function useGameState() {
         if (p.id !== activeId) return p;
 
         const newQueue = [...p.programmedQueue];
-        const existingIdx = newQueue.findIndex(c => c?.id === card.id);
-        if (existingIdx !== -1) {
-          newQueue[existingIdx] = null;
+
+        // Check if card is a basic Move Card (not from ability hand)
+        const isMoveCard = DEFAULT_MOVE_CARDS.some(mc => mc.id === card.id || mc.type === card.type) && !p.hand.some(hc => hc.id === card.id);
+
+        if (!isMoveCard) {
+          // Ability card: move from previous slot if already queued
+          const existingIdx = newQueue.findIndex(c => c?.id === card.id);
+          if (existingIdx !== -1) {
+            newQueue[existingIdx] = null;
+          }
+          newQueue[slotIdx] = card;
+        } else {
+          // Persistent Move Card: assign a unique copy to slot
+          const cardCopy: Card = {
+            ...card,
+            id: `${card.type}-slot-${slotIdx}-${Math.random().toString(36).substring(2, 7)}`,
+          };
+          newQueue[slotIdx] = cardCopy;
         }
 
-        newQueue[slotIdx] = card;
         return { ...p, programmedQueue: newQueue };
       });
     });
     sound.playCardSelect();
   }, [localPlayerId]);
+
 
   const unassignSlot = useCallback((slotIdx: number, targetPlayerId?: PlayerId) => {
     const activeId = targetPlayerId || localPlayerId;
@@ -226,10 +255,22 @@ export function useGameState() {
   useEffect(() => {
     const unsubscribe = multiplayerService.onMessage((msg: NetworkMessage) => {
       if (msg.type === 'START_GAME' && msg.payload) {
-        const { players: remotePlayers, hexGrid: remoteHexGrid } = msg.payload;
+        const { players: remotePlayers, hexGrid: remoteHexGrid, actionsPerRound: remoteActions } = msg.payload;
         if (remotePlayers && remoteHexGrid) {
+          const actionsCount = remoteActions || 3;
+          const sanitizedPlayers = remotePlayers.map((rp: PlayerState) => ({
+            ...rp,
+            roundStartCoord: rp.roundStartCoord || rp.coord,
+            roundStartFacing: rp.roundStartFacing !== undefined ? rp.roundStartFacing : rp.facing,
+          }));
+          const initialStates = remotePlayers.reduce((acc: any, rp: PlayerState) => {
+            acc[rp.id] = { coord: rp.coord, facing: rp.facing };
+            return acc;
+          }, {} as Record<PlayerId, { coord: AxialCoord; facing: number }>);
+          setRoundStartStates(initialStates);
+          setActionsPerRound(actionsCount);
           setHexGrid(remoteHexGrid);
-          setPlayers(remotePlayers);
+          setPlayers(sanitizedPlayers);
           setRound(1);
           setCurrentSlotIndex(0);
           setPriorityPlayerIdx(0);
@@ -238,7 +279,7 @@ export function useGameState() {
           setSelectedHandCard(null);
           setBattleLog([]);
           setGamePhase('planning');
-          addLog('Match Started! 4 Commanders enter the hexagonal arena.', 'system');
+          addLog(`Match Started! 4 Commanders enter the arena with ${actionsCount} actions per round.`, 'system');
         }
       } else if (msg.type === 'LOCK_IN_QUEUE' && msg.payload?.playerId) {
         const { playerId, programmedQueue } = msg.payload;
@@ -321,38 +362,83 @@ export function useGameState() {
               targetCoord = res.targetCoord;
               targetFacing = res.newFacing;
 
-              // Check collision with another unit
-              const occupantIdx = updatedPlayers.findIndex(p => !p.isEliminated && p.id !== actor.id && hexEquals(p.coord, targetCoord));
-              
-              if (occupantIdx !== -1) {
-                // Collision bump! Both take 10 collision damage
-                const occupant = updatedPlayers[occupantIdx];
-                addLog(`COLLISION! ${actor.name} bumped into ${occupant.name}! Both take 10 collision damage.`, 'move', actor.id);
-                
-                updatedPlayers = updatedPlayers.map(p => {
-                  if (p.id === actor.id || p.id === occupant.id) {
-                    const newHp = Math.max(0, p.hp - 10);
-                    return { ...p, hp: newHp, isEliminated: newHp === 0 };
-                  }
-                  return p;
-                });
-                sound.playHeavyHit();
-              } else {
-                // Move cleanly
-                updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, coord: targetCoord, facing: targetFacing } : p);
-                addLog(`${actor.name} played ${actionCard.name} and stepped to (${targetCoord.q}, ${targetCoord.r}).`, 'move', actor.id);
+              const isTargetOnGrid = hexGrid.length === 0 || hexGrid.some(t => hexEquals(t.coord, targetCoord));
 
-                // Check rune pickup
-                const tile = hexGrid.find(t => hexEquals(t.coord, targetCoord));
-                if (tile && tile.terrain === 'rune' && tile.runeEffect) {
-                  if (tile.runeEffect === 'heal') {
-                    updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, hp: Math.min(p.maxHp, p.hp + 20) } : p);
-                    addLog(`${actor.name} triggered a Healing Rune! (+20 HP)`, 'rune', actor.id);
-                    sound.playHeal();
-                  } else if (tile.runeEffect === 'shield') {
-                    updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, shield: p.shield + 20 } : p);
-                    addLog(`${actor.name} picked up a Shield Rune! (+20 Shield)`, 'rune', actor.id);
-                    sound.playShield();
+              if (!isTargetOnGrid) {
+                // Boundary wall hit! Movement blocked
+                addLog(`WALL BLOCK! ${actor.name}'s movement was blocked by the arena boundary wall!`, 'move', actor.id);
+                targetCoord = actor.coord;
+                updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, facing: targetFacing } : p);
+              } else {
+                // Check collision with another unit
+                const occupantIdx = updatedPlayers.findIndex(p => !p.isEliminated && p.id !== actor.id && hexEquals(p.coord, targetCoord));
+              
+                if (occupantIdx !== -1) {
+                  // Collision bump! Both take 10 collision damage
+                  const occupant = updatedPlayers[occupantIdx];
+                  addLog(`COLLISION! ${actor.name} bumped into ${occupant.name}! Both take 10 collision damage.`, 'move', actor.id);
+                  
+                  updatedPlayers = updatedPlayers.map(p => {
+                    if (p.id === actor.id || p.id === occupant.id) {
+                      const newHp = Math.max(0, p.hp - 10);
+                      return { ...p, hp: newHp, isEliminated: newHp === 0 };
+                    }
+                    return p;
+                  });
+                  sound.playHeavyHit();
+                } else {
+                  // Move cleanly
+                  updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, coord: targetCoord, facing: targetFacing } : p);
+                  addLog(`${actor.name} played ${actionCard.name} and stepped to (${targetCoord.q}, ${targetCoord.r}).`, 'move', actor.id);
+                }
+
+                // Check rune pickup (if on grid and valid)
+                const tileIdx = hexGrid.findIndex(t => hexEquals(t.coord, targetCoord));
+                if (tileIdx !== -1) {
+                  const tile = hexGrid[tileIdx];
+                  if (tile.terrain === 'rune' && tile.runeEffect && (!tile.runeCooldown || tile.runeCooldown === 0)) {
+                    const maxCd = tile.maxRuneCooldown || 3;
+                    setHexGrid(prevGrid => prevGrid.map((t, idx) => idx === tileIdx ? { ...t, runeCooldown: maxCd } : t));
+
+                    if (tile.runeEffect === 'attackBoost') {
+                      const buffId = `attackBoost_${Date.now()}`;
+                      updatedPlayers = updatedPlayers.map(p => {
+                        if (p.id !== actor.id) return p;
+                        const filtered = (p.buffs || []).filter(b => b.type !== 'attackBoost');
+                        return {
+                          ...p,
+                          buffs: [...filtered, { id: buffId, type: 'attackBoost', name: 'Empowered (+10 DMG)', duration: 2, value: 10 }]
+                        };
+                      });
+                      addLog(`🔥 ${actor.name} picked up an Empower Rune! (+10 Attack Damage for 2 rounds)`, 'rune', actor.id);
+                      sound.playFireball();
+                    } else if (tile.runeEffect === 'heal') {
+                      const buffId = `healRegen_${Date.now()}`;
+                      updatedPlayers = updatedPlayers.map(p => {
+                        if (p.id !== actor.id) return p;
+                        const filtered = (p.buffs || []).filter(b => b.type !== 'healRegen');
+                        return {
+                          ...p,
+                          hp: Math.min(p.maxHp, p.hp + 15),
+                          buffs: [...filtered, { id: buffId, type: 'healRegen', name: 'Vitality (+5 HP Regen)', duration: 2, value: 5 }]
+                        };
+                      });
+                      addLog(`💚 ${actor.name} picked up a Vitality Rune! (+15 HP & +5 HP/round for 2 rounds)`, 'rune', actor.id);
+                      sound.playHeal();
+                    } else if (tile.runeEffect === 'shield') {
+                      const buffId = `shield_${Date.now()}`;
+                      updatedPlayers = updatedPlayers.map(p => {
+                        if (p.id !== actor.id) return p;
+                        const filtered = (p.buffs || []).filter(b => b.type !== 'shield');
+                        return {
+                          ...p,
+                          shield: p.shield + 15,
+                          buffs: [...filtered, { id: buffId, type: 'shield', name: 'Fortified (+5 Shield)', duration: 2, value: 5 }]
+                        };
+                      });
+                      addLog(`🛡️ ${actor.name} picked up a Shield Rune! (+15 Shield & +5 Shield/round for 2 rounds)`, 'rune', actor.id);
+                      sound.playShield();
+                    }
                   }
                 }
               }
@@ -367,7 +453,11 @@ export function useGameState() {
             });
           } 
           else if (actionCard.category === 'attack') {
-            const dmg = actionCard.damage || 20;
+            const baseDmg = actionCard.damage || 20;
+            const attackBuff = actor.buffs?.find(b => b.type === 'attackBoost');
+            const bonusDmg = attackBuff ? attackBuff.value : 0;
+            const dmg = baseDmg + bonusDmg;
+
             const targetHexes = getFrontalTargetHexes(actor.coord, actor.facing, actionCard.facingAttackType || 'frontal', actionCard.range);
 
             const hitEnemies = updatedPlayers.filter(p => 
@@ -395,7 +485,7 @@ export function useGameState() {
                   return p;
                 });
 
-                addLog(`${actor.name} struck ${target.name} for ${netDamage} damage!`, 'attack', actor.id);
+                addLog(`${actor.name} struck ${target.name} for ${netDamage} damage!${bonusDmg > 0 ? ' (+10 Empowered DMG)' : ''}`, 'attack', actor.id);
                 if (isDead) {
                   sound.playElimination();
                   addLog(`💀 ${target.name} WAS ELIMINATED!`, 'elimination', target.id);
@@ -462,8 +552,8 @@ export function useGameState() {
       if (nextTurnOrder >= currentPlayers.length) {
         // Current slot complete! Advance to next slot or end round
         const nextSlot = currentSlotIndex + 1;
-        if (nextSlot >= 3) {
-          // Round end! Refill hands, reset shields, rotate priority
+        if (nextSlot >= actionsPerRound) {
+          // Round end! Refill hands, reset shields, rotate priority, decrease pickup cooldowns & process player buff ticks
           setRound(r => r + 1);
           setPriorityPlayerIdx(p => (p + 1) % currentPlayers.length);
           setCurrentSlotIndex(0);
@@ -471,9 +561,43 @@ export function useGameState() {
           setGamePhase('planning');
           setIsAutoPlay(false);
 
-          // Reset shields & draw cards
+          // Decrement pickup cooldowns on map tiles
+          setHexGrid(prevGrid => prevGrid.map(t => {
+            if (t.terrain === 'rune' && t.runeCooldown && t.runeCooldown > 0) {
+              const nextCd = t.runeCooldown - 1;
+              if (nextCd === 0) {
+                const runeName = t.runeEffect === 'attackBoost' ? 'Empower' : t.runeEffect === 'shield' ? 'Shield' : 'Vitality';
+                addLog(`✨ A ${runeName} Rune pickup has respawned!`, 'rune');
+              }
+              return { ...t, runeCooldown: nextCd };
+            }
+            return t;
+          }));
+
+          // Reset shields, draw cards, & process temporary player buff ticks
           updatedPlayers = updatedPlayers.map(p => {
             if (p.isEliminated) return p;
+
+            // Process active player buff ticks & duration decay
+            let currentHp = p.hp;
+            let currentShield = 0; // Reset shields at end of round, then apply Fortified buff
+            const remainingBuffs: PlayerState['buffs'] = [];
+
+            (p.buffs || []).forEach(buff => {
+              if (buff.type === 'healRegen') {
+                currentHp = Math.min(p.maxHp, currentHp + buff.value);
+                addLog(`💚 ${p.name} regenerated ${buff.value} HP from Vitality buff!`, 'rune', p.id);
+              } else if (buff.type === 'shield') {
+                currentShield = currentShield + buff.value;
+                addLog(`🛡️ ${p.name} gained ${buff.value} Shield from Fortified buff!`, 'rune', p.id);
+              }
+
+              if (buff.duration > 1) {
+                remainingBuffs.push({ ...buff, duration: buff.duration - 1 });
+              } else {
+                addLog(`⌛ ${p.name}'s ${buff.name} buff expired.`, 'system', p.id);
+              }
+            });
 
             // Remove played cards from hand
             const playedCardIds = p.programmedQueue.filter((c): c is Card => c !== null).map(c => c.id);
@@ -493,14 +617,24 @@ export function useGameState() {
 
             return {
               ...p,
+              hp: currentHp,
               hand: newHand,
               drawPile,
               discardPile,
-              shield: 0, // Reset shields at end of round
-              programmedQueue: [null, null, null],
+              shield: currentShield,
+              buffs: remainingBuffs,
+              roundStartCoord: p.coord,
+              roundStartFacing: p.facing,
+              programmedQueue: Array(actionsPerRound).fill(null),
               isLocked: false,
             };
           });
+
+          const nextRoundStates = updatedPlayers.reduce((acc, p) => {
+            acc[p.id] = { coord: p.coord, facing: p.facing };
+            return acc;
+          }, {} as Record<PlayerId, { coord: AxialCoord; facing: number }>);
+          setRoundStartStates(nextRoundStates);
 
           addLog(`--- Round ${round + 1} Planning Phase ---`, 'system');
         } else {
@@ -533,8 +667,9 @@ export function useGameState() {
     const intents: ProjectedIntent[] = [];
     players.forEach(p => {
       if (p.isEliminated) return;
-      let currCoord = p.coord;
-      let currFacing = p.facing;
+      const startState = roundStartStates[p.id];
+      let currCoord = startState ? startState.coord : (p.roundStartCoord || p.coord);
+      let currFacing = startState ? startState.facing : (p.roundStartFacing !== undefined ? p.roundStartFacing : p.facing);
 
       p.programmedQueue.forEach((card, slotIdx) => {
         if (!card) return;
@@ -549,7 +684,8 @@ export function useGameState() {
             targetCoords = [nextCoord];
           } else {
             const res = getRelativeHex(currCoord, currFacing, card.facingMoveType || 'forward', card.range);
-            nextCoord = res.targetCoord;
+            const isTargetOnGrid = hexGrid.length === 0 || hexGrid.some(t => hexEquals(t.coord, res.targetCoord));
+            nextCoord = isTargetOnGrid ? res.targetCoord : currCoord;
             nextFacing = res.newFacing;
             targetCoords = [nextCoord];
           }
@@ -576,11 +712,12 @@ export function useGameState() {
       });
     });
     return intents;
-  }, [players]);
+  }, [players, hexGrid, roundStartStates]);
 
   return {
     gamePhase,
     round,
+    actionsPerRound,
     currentSlotIndex,
     priorityPlayerIdx,
     resolvingTurnOrder,

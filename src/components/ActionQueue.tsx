@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Card } from '../types/game';
 import { CardTooltip } from './CardTooltip';
+import { SafeImage } from './SafeImage';
 import { Lock, X, Play } from 'lucide-react';
 
 interface ActionQueueProps {
@@ -23,12 +24,15 @@ export const ActionQueue: React.FC<ActionQueueProps> = ({
   const [hoveredSlotIdx, setHoveredSlotIdx] = useState<number | null>(null);
   const isFull = programmedQueue.every(c => c !== null);
 
+  const slotCount = programmedQueue.length;
+  const gridColsClass = slotCount === 3 ? 'grid-cols-3' : 'grid-cols-5';
+  const slotHeightClass = slotCount > 5 ? 'h-14' : slotCount === 5 ? 'h-16' : 'h-20';
+
   return (
     <div className="w-full flex flex-col items-center gap-2">
-      {/* 3 Action Programmer Slots */}
-      <div className="grid grid-cols-3 gap-2.5 w-full">
-        {[0, 1, 2].map((slotIdx) => {
-          const card = programmedQueue[slotIdx];
+      {/* Dynamic Action Programmer Slots */}
+      <div className={`grid ${gridColsClass} gap-1.5 w-full`}>
+        {programmedQueue.map((card, slotIdx) => {
           const isHovered = hoveredSlotIdx === slotIdx;
 
           return (
@@ -44,7 +48,7 @@ export const ActionQueue: React.FC<ActionQueueProps> = ({
                   onAssignSlot(slotIdx, selectedCard);
                 }
               }}
-              className={`relative h-20 rounded-xl border-2 border-dashed flex flex-col items-center justify-center p-1 text-center cursor-pointer transition-all duration-200 ${
+              className={`relative ${slotHeightClass} rounded-xl border-2 border-dashed flex flex-col items-center justify-center p-0.5 text-center cursor-pointer transition-all duration-200 ${
                 isHovered ? 'z-50' : 'z-10'
               } ${
                 card
@@ -57,12 +61,12 @@ export const ActionQueue: React.FC<ActionQueueProps> = ({
               {/* Floating Tooltip when card in slot is hovered */}
               {isHovered && card && <CardTooltip card={card} position="top" />}
               {/* Slot Number Badge */}
-              <div className="absolute -top-2 left-2 bg-slate-900 border border-slate-700 text-[9px] font-mono font-bold text-amber-400 px-1.5 py-0.2 rounded-full">
-                SLOT {slotIdx + 1}
+              <div className="absolute -top-2 left-1 bg-slate-900 border border-slate-700 text-[8px] font-mono font-bold text-amber-400 px-1 py-0.2 rounded-full">
+                S{slotIdx + 1}
               </div>
 
               {card ? (
-                <div className="flex flex-col items-center w-full relative px-1">
+                <div className="flex flex-col items-center w-full relative px-0.5">
                   {!isLocked && (
                     <button
                       onClick={(e) => {
@@ -74,15 +78,18 @@ export const ActionQueue: React.FC<ActionQueueProps> = ({
                       <X className="w-3 h-3" />
                     </button>
                   )}
-                  {card.spriteUrl ? (
-                    <img src={card.spriteUrl} alt={card.name} className="w-6 h-6 object-contain rounded my-0.5 shadow" />
-                  ) : null}
-                  <span className="text-[10px] font-bold text-slate-100 line-clamp-1">{card.name}</span>
+                  <SafeImage
+                    src={card.spriteUrl}
+                    alt={card.name}
+                    className={`${slotCount > 5 ? 'w-4 h-4' : 'w-5 h-5'} object-contain rounded my-0.5 shadow`}
+                    fallback={<span className="text-[9px] font-bold text-amber-400 my-0.5">{card.name.charAt(0)}</span>}
+                  />
+                  <span className={`${slotCount > 5 ? 'text-[8.5px]' : 'text-[9.5px]'} font-bold text-slate-100 line-clamp-1 leading-tight`}>{card.name}</span>
                 </div>
               ) : (
-                <div className="text-slate-500 text-[10px] flex flex-col items-center">
-                  <span>Empty Slot</span>
-                  <span className="text-[8px] text-slate-600">Click card & tap</span>
+                <div className="text-slate-500 text-[9px] flex flex-col items-center leading-none">
+                  <span>Empty</span>
+                  {slotCount <= 5 && <span className="text-[7.5px] text-slate-600">Tap</span>}
                 </div>
               )}
             </div>

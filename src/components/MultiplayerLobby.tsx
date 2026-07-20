@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import type { MultiplayerSeat, ConnectedPeer, PlayerId } from '../types/game';
 import type { SetupPlayerOption } from '../state/useGameState';
-import { Users, Copy, Check, Bot, User, Play, Radio, WifiOff, ArrowRight, ShieldCheck, LogOut, CheckCircle2 } from 'lucide-react';
+import { PortraitSelectModal } from './PortraitSelectModal';
+import { SafeImage } from './SafeImage';
+import { Users, Copy, Check, Bot, User, Play, Radio, WifiOff, ArrowRight, ShieldCheck, LogOut, CheckCircle2, Sparkles } from 'lucide-react';
+import type { CharacterPortrait } from '../utils/characterPortraits';
 
 interface MultiplayerLobbyProps {
   role: 'single' | 'host' | 'client';
@@ -19,7 +22,7 @@ interface MultiplayerLobbyProps {
   onReleaseSeat: (seatId: PlayerId) => void;
   onUpdatePlayerName: (name: string) => void;
   onUpdateSeats: (seats: MultiplayerSeat[]) => void;
-  onStartGame: (setup: SetupPlayerOption[]) => void;
+  onStartGame: (setup: SetupPlayerOption[], actionsPerRound?: number) => void;
   onLeaveRoom: () => void;
 }
 
@@ -54,6 +57,13 @@ const FACTION_STYLES: Record<PlayerId, { label: string; border: string; bg: stri
   },
 };
 
+const DEFAULT_SEAT_AVATARS: Record<PlayerId, string> = {
+  player1: 'sprites/portrait_valerius.svg',
+  player2: 'sprites/portrait_kaelen.svg',
+  player3: 'sprites/portrait_seraphina.svg',
+  player4: 'sprites/portrait_ignis.svg',
+};
+
 export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
   role,
   roomCode,
@@ -73,11 +83,13 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
   onStartGame,
   onLeaveRoom,
 }) => {
+  const [actionsPerRound, setActionsPerRound] = useState<number>(3);
   const [tab, setTab] = useState<'host' | 'join'>('host');
   const [joinCodeInput, setJoinCodeInput] = useState<string>('');
   const [preferredNameInput, setPreferredNameInput] = useState<string>('Commander Duelist');
   const [copied, setCopied] = useState<boolean>(false);
   const [editingName, setEditingName] = useState<string>(localPlayerName);
+  const [selectedModalPlayerId, setSelectedModalPlayerId] = useState<PlayerId | null>(null);
 
   useEffect(() => {
     if (localPlayerName) {
@@ -117,6 +129,14 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
     if (editingName.trim() && editingName !== localPlayerName) {
       onUpdatePlayerName(editingName.trim());
     }
+  };
+
+  const handleSelectPortrait = (portrait: CharacterPortrait) => {
+    if (!selectedModalPlayerId) return;
+    const updated = seats.map((s) =>
+      s.id === selectedModalPlayerId ? { ...s, avatarUrl: portrait.avatarUrl } : s
+    );
+    onUpdateSeats(updated);
   };
 
   return (
@@ -272,9 +292,26 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                   >
                     {/* Left: Seat info & avatar */}
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`w-6 h-6 rounded-lg bg-slate-950 border ${style.border} flex items-center justify-center font-mono font-black ${style.text} text-xs shadow-inner flex-shrink-0`}>
-                        P{idx + 1}
-                      </div>
+                      {/* Selectable Character Portrait Button */}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedModalPlayerId(seat.id)}
+                        title="Click to select character portrait"
+                        className={`relative w-8 h-8 rounded-lg bg-slate-950 border ${style.border} hover:border-amber-400 hover:scale-105 transition-all flex items-center justify-center overflow-hidden group shadow-md flex-shrink-0 cursor-pointer`}
+                      >
+                        <SafeImage
+                          src={seat.avatarUrl || DEFAULT_SEAT_AVATARS[seat.id]}
+                          alt={seat.name}
+                          className="w-full h-full object-cover"
+                          fallback={<span className={`font-mono font-black ${style.text} text-xs`}>P{idx + 1}</span>}
+                        />
+                        <div className="absolute top-0 right-0 bg-slate-950/80 px-0.5 rounded-bl text-[7px] font-mono font-black text-amber-400">
+                          P{idx + 1}
+                        </div>
+                        <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity z-10">
+                          <Sparkles className="w-3 h-3 text-amber-300 animate-pulse" />
+                        </div>
+                      </button>
 
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-1.5">
@@ -389,12 +426,33 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
 
           {/* Start Arena Match CTA */}
           {role === 'host' && (
-            <button
-              onClick={() => onStartGame(seats)}
-              className="w-full py-2.5 rounded-xl gold-btn uppercase tracking-wider text-xs font-black flex items-center justify-center gap-2 shadow-lg transform hover:scale-[1.01] transition-all"
-            >
-              <Play className="w-4 h-4 fill-slate-950 text-slate-950" /> Start Match ({seats.filter((s) => !s.isAi).length} Humans / {seats.filter((s) => s.isAi).length} Bots)
-            </button>
+            <div className="w-full space-y-2">
+              <div className="p-2.5 rounded-xl bg-slate-950/90 border border-amber-500/30 flex items-center justify-between gap-2 shadow-inner">
+                <span className="text-xs font-bold text-amber-200 font-sans">Actions Per Round:</span>
+                <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg p-0.5 gap-1 font-mono">
+                  {[3, 5, 10].map((count) => (
+                    <button
+                      key={count}
+                      type="button"
+                      onClick={() => setActionsPerRound(count)}
+                      className={`px-2.5 py-0.5 text-[11px] font-extrabold rounded transition-all ${
+                        actionsPerRound === count
+                          ? 'bg-amber-500 text-slate-950 shadow'
+                          : 'text-slate-400 hover:text-amber-200'
+                      }`}
+                    >
+                      {count}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={() => onStartGame(seats, actionsPerRound)}
+                className="w-full py-2.5 rounded-xl gold-btn uppercase tracking-wider text-xs font-black flex items-center justify-center gap-2 shadow-lg transform hover:scale-[1.01] transition-all"
+              >
+                <Play className="w-4 h-4 fill-slate-950 text-slate-950" /> Start Match ({actionsPerRound} Actions/Round)
+              </button>
+            </div>
           )}
 
           {role === 'client' && (
@@ -406,7 +464,23 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
           )}
         </div>
       )}
+
+      {/* Character Portrait Selection Modal */}
+      <PortraitSelectModal
+        isOpen={selectedModalPlayerId !== null}
+        playerSeatLabel={
+          selectedModalPlayerId
+            ? `Seat ${selectedModalPlayerId.toUpperCase()}`
+            : ''
+        }
+        currentAvatarUrl={
+          seats.find((s) => s.id === selectedModalPlayerId)?.avatarUrl
+        }
+        onClose={() => setSelectedModalPlayerId(null)}
+        onSelectPortrait={handleSelectPortrait}
+      />
     </div>
   );
 };
+
 

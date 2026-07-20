@@ -79,17 +79,28 @@ export interface ProjectedIntent {
   type: CardCategory;
 }
 
+export interface PlayerBuff {
+  id: string;
+  type: 'attackBoost' | 'shield' | 'healRegen';
+  name: string;
+  duration: number; // turns remaining
+  value: number;
+}
+
 export interface PlayerState {
   id: PlayerId;
   name: string;
   isAi: boolean;
   aiDifficulty: 'easy' | 'medium' | 'hard';
   faction: FactionId;
+  avatarUrl?: string;
   hp: number;
   maxHp: number;
   shield: number;
   coord: AxialCoord;
   facing: number; // 0 to 5 hex directions
+  roundStartCoord?: AxialCoord;
+  roundStartFacing?: number;
   hand: Card[];
   drawPile: Card[];
   discardPile: Card[];
@@ -98,6 +109,7 @@ export interface PlayerState {
   isEliminated: boolean;
   kills: number;
   damageDealt: number;
+  buffs?: PlayerBuff[];
 }
 
 export type TerrainType = 'flat' | 'obstacle' | 'rune';
@@ -106,6 +118,8 @@ export interface HexTile {
   coord: AxialCoord;
   terrain: TerrainType;
   runeEffect?: 'heal' | 'shield' | 'attackBoost';
+  runeCooldown?: number;
+  maxRuneCooldown?: number;
 }
 
 export type GamePhase = 'setup' | 'planning' | 'resolving' | 'gameover';
@@ -139,6 +153,7 @@ export interface MultiplayerSeat {
   aiDifficulty: 'easy' | 'medium' | 'hard';
   peerId?: string;
   isReady?: boolean;
+  avatarUrl?: string;
 }
 
 export interface ConnectedPeer {
