@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { MultiplayerSeat } from '../types/game';
+import type { MultiplayerSeat, ConnectedPeer, PlayerId } from '../types/game';
 import type { SetupPlayerOption } from '../state/useGameState';
 import { MultiplayerLobby } from './MultiplayerLobby';
 import { Swords, Bot, User, Zap, Crown, Globe, Shield } from 'lucide-react';
@@ -8,10 +8,17 @@ interface GameSetupProps {
   role: 'single' | 'host' | 'client';
   roomCode: string | null;
   seats: MultiplayerSeat[];
+  connectedPeers: ConnectedPeer[];
+  localPeerId: string | null;
+  localPlayerId: PlayerId;
+  localPlayerName: string;
   isConnecting: boolean;
   connectError: string | null;
   onHostRoom: (customCode?: string) => void;
   onJoinRoom: (code: string) => void;
+  onClaimSeat: (seatId: PlayerId) => void;
+  onReleaseSeat: (seatId: PlayerId) => void;
+  onUpdatePlayerName: (name: string) => void;
   onUpdateSeats: (seats: MultiplayerSeat[]) => void;
   onStartGame: (setup: SetupPlayerOption[]) => void;
   onLeaveRoom: () => void;
@@ -21,10 +28,17 @@ export const GameSetup: React.FC<GameSetupProps> = ({
   role,
   roomCode,
   seats,
+  connectedPeers,
+  localPeerId,
+  localPlayerId,
+  localPlayerName,
   isConnecting,
   connectError,
   onHostRoom,
   onJoinRoom,
+  onClaimSeat,
+  onReleaseSeat,
+  onUpdatePlayerName,
   onUpdateSeats,
   onStartGame,
   onLeaveRoom,
@@ -176,10 +190,17 @@ export const GameSetup: React.FC<GameSetupProps> = ({
           role={role}
           roomCode={roomCode}
           seats={seats}
+          connectedPeers={connectedPeers}
+          localPeerId={localPeerId}
+          localPlayerId={localPlayerId}
+          localPlayerName={localPlayerName}
           isConnecting={isConnecting}
           connectError={connectError}
           onHostRoom={onHostRoom}
           onJoinRoom={onJoinRoom}
+          onClaimSeat={onClaimSeat}
+          onReleaseSeat={onReleaseSeat}
+          onUpdatePlayerName={onUpdatePlayerName}
           onUpdateSeats={onUpdateSeats}
           onStartGame={onStartGame}
           onLeaveRoom={onLeaveRoom}

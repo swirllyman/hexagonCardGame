@@ -8,6 +8,7 @@ interface PlayerStatusPanelProps {
   priorityPlayerIdx: number;
   currentSlotIndex: number;
   gamePhase: string;
+  localPlayerId?: string;
 }
 
 const FACTION_THEMES = {
@@ -22,6 +23,7 @@ export const PlayerStatusPanel: React.FC<PlayerStatusPanelProps> = ({
   priorityPlayerIdx,
   currentSlotIndex,
   gamePhase,
+  localPlayerId,
 }) => {
   const [hoveredBadge, setHoveredBadge] = useState<{ playerId: string; slotIdx: number } | null>(null);
 
@@ -30,6 +32,7 @@ export const PlayerStatusPanel: React.FC<PlayerStatusPanelProps> = ({
       {players.map((player, idx) => {
         const theme = FACTION_THEMES[player.faction];
         const isPriority = priorityPlayerIdx === idx;
+        const isLocalPlayer = localPlayerId === player.id;
         const hpPercent = Math.max(0, Math.min(100, (player.hp / player.maxHp) * 100));
 
         return (
@@ -38,6 +41,8 @@ export const PlayerStatusPanel: React.FC<PlayerStatusPanelProps> = ({
             className={`relative rounded-2xl border p-2.5 flex flex-col justify-between backdrop-blur-md transition-all duration-300 ${
               player.isEliminated
                 ? 'bg-slate-950/90 border-slate-800/50 opacity-40 grayscale'
+                : isLocalPlayer
+                ? `bg-gradient-to-b ${theme.banner} ${theme.border} ring-2 ring-amber-400/50 shadow-2xl scale-[1.01]`
                 : `bg-gradient-to-b ${theme.banner} ${theme.border} shadow-xl hover:border-amber-500/50`
             }`}
           >
@@ -50,11 +55,17 @@ export const PlayerStatusPanel: React.FC<PlayerStatusPanelProps> = ({
 
             {/* Header: Player Name & Icon */}
             <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
                 <div className={`w-2.5 h-2.5 rounded-full ${theme.badge} shadow`} />
-                <span className="font-extrabold text-xs text-slate-100 line-clamp-1 tracking-tight">{player.name}</span>
+                <span className="font-extrabold text-xs text-slate-100 truncate tracking-tight">{player.name}</span>
+                {isLocalPlayer && (
+                  <span className="text-[8px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 px-1 py-0.2 rounded">
+                    YOU
+                  </span>
+                )}
               </div>
-              <div className="text-slate-400">
+              <div className="text-slate-400 flex items-center gap-1">
+                {!player.isAi && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
                 {player.isAi ? <Bot className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5 text-amber-400" />}
               </div>
             </div>

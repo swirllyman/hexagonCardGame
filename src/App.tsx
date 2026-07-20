@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useGameState } from './state/useGameState';
 import { useMultiplayer } from './hooks/useMultiplayer';
 import { HexMap } from './components/HexMap';
@@ -31,6 +31,7 @@ export function App() {
     currentAnimation,
     projectedIntents,
     localPlayerId,
+    setLocalPlayerId,
     initGame,
     assignCardToSlot,
     unassignSlot,
@@ -44,6 +45,13 @@ export function App() {
   } = useGameState();
 
   const multiplayer = useMultiplayer();
+
+  // Sync multiplayer localPlayerId with game state localPlayerId
+  useEffect(() => {
+    if (multiplayer.localPlayerId) {
+      setLocalPlayerId(multiplayer.localPlayerId);
+    }
+  }, [multiplayer.localPlayerId, setLocalPlayerId]);
 
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [showRules, setShowRules] = useState<boolean>(false);
@@ -154,10 +162,17 @@ export function App() {
             role={multiplayer.role}
             roomCode={multiplayer.roomCode}
             seats={multiplayer.seats}
+            connectedPeers={multiplayer.connectedPeers}
+            localPeerId={multiplayer.localPeerId}
+            localPlayerId={multiplayer.localPlayerId}
+            localPlayerName={multiplayer.localPlayerName}
             isConnecting={multiplayer.isConnecting}
             connectError={multiplayer.connectError}
             onHostRoom={multiplayer.hostRoom}
             onJoinRoom={multiplayer.joinRoom}
+            onClaimSeat={multiplayer.claimSeat}
+            onReleaseSeat={multiplayer.releaseSeat}
+            onUpdatePlayerName={multiplayer.updatePlayerName}
             onUpdateSeats={multiplayer.updateSeats}
             onStartGame={initGame}
             onLeaveRoom={multiplayer.leaveRoom}
@@ -176,6 +191,7 @@ export function App() {
                   priorityPlayerIdx={priorityPlayerIdx}
                   currentSlotIndex={currentSlotIndex}
                   gamePhase={gamePhase}
+                  localPlayerId={multiplayer.localPlayerId}
                 />
               </div>
 

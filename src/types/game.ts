@@ -141,6 +141,14 @@ export interface MultiplayerSeat {
   isReady?: boolean;
 }
 
+export interface ConnectedPeer {
+  peerId: string;
+  name: string;
+  isHost: boolean;
+  isOnline: boolean;
+  assignedSeatId?: PlayerId | null;
+}
+
 export type EmoteType = 'swords' | 'shield' | 'fire' | 'skull' | 'laugh' | 'gg' | 'target';
 
 export interface EmotePayload {
@@ -154,6 +162,9 @@ export interface EmotePayload {
 
 export type NetworkMessageType =
   | 'LOBBY_STATE'
+  | 'CLAIM_SEAT'
+  | 'RELEASE_SEAT'
+  | 'UPDATE_PLAYER_INFO'
   | 'START_GAME'
   | 'LOCK_IN_QUEUE'
   | 'EMOTE'

@@ -119,6 +119,20 @@ export function useGameState() {
     setGamePhase('planning');
 
     addLog('Match Started! 4 Commanders enter the hexagonal arena.', 'system');
+
+    // Broadcast game start if Host
+    if (multiplayerService.isHost) {
+      multiplayerService.sendMessage({
+        type: 'START_GAME',
+        senderPeerId: multiplayerService.peerId || '',
+        payload: {
+          players: initialPlayers,
+          hexGrid: grid,
+          round: 1,
+          gamePhase: 'planning',
+        },
+      });
+    }
   }, [addLog]);
 
   const [localPlayerId, setLocalPlayerId] = useState<PlayerId>('player1');
@@ -211,7 +225,22 @@ export function useGameState() {
   // Network Sync Listener
   useEffect(() => {
     const unsubscribe = multiplayerService.onMessage((msg: NetworkMessage) => {
-      if (msg.type === 'LOCK_IN_QUEUE' && msg.payload?.playerId) {
+      if (msg.type === 'START_GAME' && msg.payload) {
+        const { players: remotePlayers, hexGrid: remoteHexGrid } = msg.payload;
+        if (remotePlayers && remoteHexGrid) {
+          setHexGrid(remoteHexGrid);
+          setPlayers(remotePlayers);
+          setRound(1);
+          setCurrentSlotIndex(0);
+          setPriorityPlayerIdx(0);
+          setResolvingTurnOrder(0);
+          setWinner(null);
+          setSelectedHandCard(null);
+          setBattleLog([]);
+          setGamePhase('planning');
+          addLog('Match Started! 4 Commanders enter the hexagonal arena.', 'system');
+        }
+      } else if (msg.type === 'LOCK_IN_QUEUE' && msg.payload?.playerId) {
         const { playerId, programmedQueue } = msg.payload;
         setPlayers(prev => {
           let updated = prev.map(p => {
