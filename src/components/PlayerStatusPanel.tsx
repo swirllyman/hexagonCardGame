@@ -42,6 +42,8 @@ export const PlayerStatusPanel: React.FC<PlayerStatusPanelProps> = ({
         const isLocalPlayer = localPlayerId === player.id;
         const hpPercent = Math.max(0, Math.min(100, (player.hp / player.maxHp) * 100));
 
+        const hideIntent = !isLocalPlayer && gamePhase === 'planning';
+
         const cardQueue = player.programmedQueue.map((card, slotIdx) => {
           const isActiveSlot = gamePhase === 'resolving' && currentSlotIndex === slotIdx;
           const isHovered = hoveredBadge?.playerId === player.id && hoveredBadge?.slotIdx === slotIdx;
@@ -79,17 +81,21 @@ export const PlayerStatusPanel: React.FC<PlayerStatusPanelProps> = ({
                   : 'border-slate-800/80 bg-slate-950/80 text-slate-700'
               }`}
             >
-              {isHovered && card && <CardTooltip card={card} position={vertical ? 'left' : 'bottom'} />}
+              {isHovered && card && !hideIntent && <CardTooltip card={card} position={vertical ? 'right' : 'bottom'} />}
               <span className="absolute top-0.5 left-0.5 text-[6px] font-mono leading-none text-slate-500 opacity-70">
                 {slotIdx + 1}
               </span>
               {card ? (
-                <SafeImage
-                  src={card.spriteUrl}
-                  alt={card.name}
-                  className={`${vertical ? 'w-2.5 h-2.5' : queueLen > 6 ? 'w-3 h-3' : 'w-3.5 h-3.5'} object-contain rounded ${vertical ? '' : 'mt-1'}`}
-                  fallback={<span className={`text-[7px] font-bold text-amber-400 ${vertical ? '' : 'mt-1'}`}>{card.name.charAt(0)}</span>}
-                />
+                hideIntent ? (
+                  <span className="text-slate-500 font-extrabold text-[8px] animate-pulse">?</span>
+                ) : (
+                  <SafeImage
+                    src={card.spriteUrl}
+                    alt={card.name}
+                    className={`${vertical ? 'w-2.5 h-2.5' : queueLen > 6 ? 'w-3 h-3' : 'w-3.5 h-3.5'} object-contain rounded ${vertical ? '' : 'mt-1'}`}
+                    fallback={<span className={`text-[7px] font-bold text-amber-400 ${vertical ? '' : 'mt-1'}`}>{card.name.charAt(0)}</span>}
+                  />
+                )
               ) : (
                 <span className={`text-slate-600 text-[7px] ${vertical ? '' : 'mt-1'}`}>-</span>
               )}
@@ -132,12 +138,17 @@ export const PlayerStatusPanel: React.FC<PlayerStatusPanelProps> = ({
                   />
                   <span className="font-extrabold text-[11px] text-slate-100 truncate tracking-tight">{player.name}</span>
                   {isLocalPlayer && (
-                    <span className="text-[7px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 px-1 py-0 rounded">
+                    <span className="text-[7px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 px-1 py-0 rounded shrink-0">
                       YOU
                     </span>
                   )}
+                  {player.isLocked && !player.isEliminated && (
+                    <span className="text-[6.5px] font-extrabold bg-amber-500 text-slate-950 px-1 py-0.5 rounded flex items-center justify-center animate-pulse shrink-0 leading-none">
+                      READY
+                    </span>
+                  )}
                 </div>
-                <div className="text-slate-400 flex items-center gap-0.5">
+                <div className="text-slate-400 flex items-center gap-0.5 shrink-0">
                   {!player.isAi && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
                   {player.isAi ? <Bot className="w-3 h-3" /> : <User className="w-3 h-3 text-amber-400" />}
                 </div>

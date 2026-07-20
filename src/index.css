@@ -109,3 +109,30 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(245, 158, 11, 0.8);
 }
+
+/* Scaling Container Styles */
+.game-viewport {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scale-wrapper {
+  transform: scale(var(--ui-scale, 1));
+  transform-origin: center center;
+  width: 1440px;
+  height: 860px;
+  min-width: 1440px;
+  min-height: 860px;
+  max-width: 1440px;
+  max-height: 860px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+

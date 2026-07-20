@@ -56,8 +56,28 @@ export function App() {
 
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [showRules, setShowRules] = useState<boolean>(false);
+  const [scale, setScale] = useState<number>(1);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const targetWidth = 1440;
+      const targetHeight = 860;
+      const scaleX = window.innerWidth / targetWidth;
+      const scaleY = window.innerHeight / targetHeight;
+      setScale(Math.min(scaleX, scaleY));
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const controlledPlayer = players.find((p) => p.id === localPlayerId) || players.find((p) => !p.isAi) || players[0];
+
+  const activePlayers = players.filter(p => !p.isEliminated);
+  const otherActivePlayers = activePlayers.filter(p => p.id !== controlledPlayer?.id);
+  const allOthersLocked = otherActivePlayers.length > 0 && otherActivePlayers.every(p => p.isLocked);
+  const waitingOnYou = allOthersLocked && controlledPlayer && !controlledPlayer.isLocked && gamePhase === 'planning';
 
   const toggleSound = () => {
     const muted = sound.toggleMute();
@@ -65,8 +85,12 @@ export function App() {
   };
 
   return (
-    <div className="h-screen w-screen max-h-screen max-w-screen overflow-hidden text-slate-100 flex flex-col p-2 font-sans select-none">
-      {/* Compact Top Header Bar */}
+    <div className="game-viewport">
+      <div 
+        className="scale-wrapper text-slate-100 p-2 font-sans select-none"
+        style={{ '--ui-scale': scale } as React.CSSProperties}
+      >
+        {/* Compact Top Header Bar */}
       <header className="h-11 flex-shrink-0 w-full flex items-center justify-between px-3 fantasy-panel rounded-xl backdrop-blur-md shadow-md mb-1.5 border border-amber-600/30">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="p-1.5 bg-amber-500/10 border border-amber-500/40 rounded-lg text-amber-400 flex-shrink-0">
@@ -104,7 +128,12 @@ export function App() {
 
           {gamePhase !== 'setup' && (
             <button
-              onClick={() => setGamePhase('setup')}
+              onClick={() => {
+                if (multiplayer.role === 'host') {
+                  multiplayer.kickAllPeers();
+                }
+                setGamePhase('setup');
+              }}
               className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-amber-600/40 text-amber-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all"
               title="Reset Match"
             >
@@ -223,6 +252,7 @@ export function App() {
                     }
                     currentAnimation={currentAnimation}
                     projectedIntents={projectedIntents}
+                    localPlayerId={localPlayerId}
                     onHexHover={setHoveredHex}
                     onHexClick={() => {}}
                   />
@@ -237,6 +267,12 @@ export function App() {
 
             {/* Bottom Dock Control Panel */}
             <div className="relative z-40 flex-shrink-0 w-full fantasy-panel border border-amber-600/40 rounded-xl p-2 flex flex-col md:flex-row items-center justify-between gap-3 shadow-2xl backdrop-blur-md">
+              {waitingOnYou && (
+                <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-rose-600 to-rose-700 border border-rose-400 text-slate-100 font-extrabold text-[10px] px-4 py-1.5 rounded-full shadow-xl animate-bounce uppercase tracking-wider flex items-center gap-1.5 z-50">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-100 animate-ping" />
+                  Everyone is waiting on you! Lock in to start the round
+                </div>
+              )}
               {gamePhase === 'planning' && controlledPlayer && (
                 <>
                   <div className="w-full flex-1 min-w-0">
@@ -276,6 +312,7 @@ export function App() {
                     isAutoPlay={isAutoPlay}
                     playSpeed={playSpeed}
                     totalSlots={actionsPerRound}
+                    isClient={multiplayer.role === 'client'}
                     onExecuteStep={executeNextStep}
                     onToggleAutoPlay={() => setIsAutoPlay(!isAutoPlay)}
                     onChangeSpeed={setPlaySpeed}
@@ -287,15 +324,22 @@ export function App() {
         </div>
       )}
 
-      {/* Game Over Summary Modal */}
-      {gamePhase === 'gameover' && (
-        <GameOverModal
-          winner={winner}
-          players={players}
-          round={round}
-          onRestart={() => setGamePhase('setup')}
-        />
-      )}
+        {/* Game Over Summary Modal */}
+        {gamePhase === 'gameover' && (
+          <GameOverModal
+            winner={winner}
+            players={players}
+            round={round}
+            battleLog={battleLog}
+            onRestart={() => {
+              if (multiplayer.role === 'host') {
+                multiplayer.kickAllPeers();
+              }
+              setGamePhase('setup');
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }

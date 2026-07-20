@@ -117,8 +117,8 @@ export const CardHand: React.FC<CardHandProps> = ({
           <span className={`text-[7.5px] uppercase font-mono font-bold px-1 py-0.5 rounded border whitespace-nowrap shrink-0 leading-none ${categoryStyle.badge}`}>
             {isMoveCard ? 'Basic Move' : categoryStyle.label}
           </span>
-          <span className="text-[7.5px] font-mono text-amber-200/80 whitespace-nowrap shrink-0 leading-none">
-            {card.range === 0 ? 'Self' : `R${card.range}`}
+          <span className="text-[7.5px] font-mono font-bold text-amber-300 bg-amber-950/80 border border-amber-500/40 px-1 py-0.5 rounded flex items-center gap-0.5 whitespace-nowrap shrink-0 leading-none shadow-inner">
+            🎯 {card.range === 0 ? 'Self' : `R${card.range}`}
           </span>
         </div>
 
@@ -190,6 +190,9 @@ export const CardHand: React.FC<CardHandProps> = ({
     );
   };
 
+  const movementHandCards = hand.filter(c => c.category === 'movement');
+  const abilityHandCards = hand.filter(c => c.category !== 'movement');
+
   return (
     <div className="w-full flex items-center justify-center gap-3 flex-wrap md:flex-nowrap">
       {/* Move Cards Section (Far Left) */}
@@ -198,11 +201,12 @@ export const CardHand: React.FC<CardHandProps> = ({
           <Compass className="w-3 h-3 text-emerald-400" />
           <span>Move Cards</span>
           <span className="text-[8px] bg-emerald-950 text-emerald-300 border border-emerald-500/40 px-1 rounded-full">
-            ∞ Unlimited
+            Basic + Hand
           </span>
         </div>
         <div className="flex items-center gap-2">
           {DEFAULT_MOVE_CARDS.map((card, index) => renderCardItem(card, true, index))}
+          {movementHandCards.map((card, index) => renderCardItem(card, false, index))}
         </div>
       </div>
 
@@ -215,11 +219,11 @@ export const CardHand: React.FC<CardHandProps> = ({
           <Sparkle className="w-3 h-3 text-amber-400" />
           <span>Ability Cards</span>
           <span className="text-[8px] bg-amber-950 text-amber-300 border border-amber-500/40 px-1 rounded-full">
-            5 Active
+            {abilityHandCards.length} Active
           </span>
         </div>
         <div className="flex items-center">
-          {hand.map((card, index) => renderCardItem(card, false, index))}
+          {abilityHandCards.map((card, index) => renderCardItem(card, false, index))}
         </div>
       </div>
     </div>

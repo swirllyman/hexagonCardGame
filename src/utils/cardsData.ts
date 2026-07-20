@@ -197,6 +197,18 @@ export const DEFAULT_MOVE_CARDS: Card[] = [
     iconName: 'RotateCw',
     spriteUrl: 'sprites/card_icon_pivot_right.svg',
   },
+  {
+    id: 'about-face-fixed',
+    type: 'pivot_right',
+    name: '180 Flip',
+    description: 'Turn around 180° (about face).',
+    category: 'movement',
+    range: 0,
+    facingMoveType: 'about_face',
+    turnAmount: 3,
+    iconName: 'RotateCw',
+    spriteUrl: 'sprites/card_icon_about_face.svg',
+  },
 ];
 
 export function shuffleDeck(cards: Card[]): Card[] {

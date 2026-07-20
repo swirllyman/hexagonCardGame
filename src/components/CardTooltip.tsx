@@ -133,7 +133,12 @@ export const CardTooltip: React.FC<CardTooltipProps> = ({ card, position = 'top'
       </div>
 
       {/* Decorative arrow pointer */}
-      <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-3 h-3 bg-slate-950 border-b-2 border-r-2 border-slate-700 transform rotate-45 pointer-events-none" />
+      <div className={`absolute w-3 h-3 bg-slate-950 ${style.border} ${
+        position === 'top' ? '-bottom-1.5 left-1/2 -translate-x-1/2 border-b-2 border-r-2' :
+        position === 'bottom' ? '-top-1.5 left-1/2 -translate-x-1/2 border-t-2 border-l-2' :
+        position === 'left' ? '-right-1.5 top-1/2 -translate-y-1/2 border-t-2 border-r-2' :
+        '-left-1.5 top-1/2 -translate-y-1/2 border-b-2 border-l-2'
+      } transform rotate-45 pointer-events-none`} />
     </div>
   );
 };

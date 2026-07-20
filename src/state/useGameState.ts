@@ -18,6 +18,8 @@ import {
   getRelativeHex,
   rotateFacing,
   getFrontalTargetHexes,
+  normalizeFacing,
+  hexNeighborInDir,
 } from '../utils/hexGrid';
 import { createStandardPlayerDeck, shuffleDeck, DEFAULT_MOVE_CARDS } from '../utils/cardsData';
 import { programAiTurn } from '../utils/aiEngine';
@@ -240,6 +242,7 @@ export function useGameState() {
         setCurrentSlotIndex(0);
         setResolvingTurnOrder(0);
         setGamePhase('resolving');
+        setIsAutoPlay(true);
         addLog(`Round ${round} Planning locked by all Commanders. Commencing execution!`, 'system');
       } else {
         addLog(`${targetPlayer?.name || pId} has locked in their tactical queue!`, 'system');
@@ -308,10 +311,33 @@ export function useGameState() {
             setCurrentSlotIndex(0);
             setResolvingTurnOrder(0);
             setGamePhase('resolving');
+            setIsAutoPlay(true);
             addLog(`All Commanders have locked in queues! Phase: Resolution`, 'system');
           }
           return updated;
         });
+      } else if (msg.type === 'SYNC_GAME_STATE' && msg.payload) {
+        const {
+          players: rPlayers,
+          hexGrid: rHexGrid,
+          currentSlotIndex: rSlot,
+          resolvingTurnOrder: rTurnOrder,
+          gamePhase: rPhase,
+          currentAnimation: rAnim,
+          battleLog: rLog,
+          round: rRound,
+          winner: rWinner,
+        } = msg.payload;
+
+        if (rPlayers) setPlayers(rPlayers);
+        if (rHexGrid) setHexGrid(rHexGrid);
+        if (rSlot !== undefined) setCurrentSlotIndex(rSlot);
+        if (rTurnOrder !== undefined) setResolvingTurnOrder(rTurnOrder);
+        if (rPhase) setGamePhase(rPhase);
+        if (rAnim !== undefined) setCurrentAnimation(rAnim);
+        if (rLog) setBattleLog(rLog);
+        if (rRound !== undefined) setRound(rRound);
+        if (rWinner !== undefined) setWinner(rWinner);
       } else if (msg.type === 'EMOTE' && msg.payload) {
         const { senderName, text } = msg.payload;
         addLog(`[Emote] ${senderName}: ${text}`, 'system');
@@ -485,7 +511,47 @@ export function useGameState() {
                   return p;
                 });
 
-                addLog(`${actor.name} struck ${target.name} for ${netDamage} damage!${bonusDmg > 0 ? ' (+10 Empowered DMG)' : ''}`, 'attack', actor.id);
+                addLog(`${actor.name} struck ${target.name} with ${actionCard.name} for ${netDamage} damage!${bonusDmg > 0 ? ' (+10 Empowered DMG)' : ''}`, 'attack', actor.id);
+                
+                // Add knockback logic for attacks with pushDist!
+                if (actionCard.pushDist && actionCard.pushDist > 0 && !isDead) {
+                  const pushDist = actionCard.pushDist;
+                  const pushDir = normalizeFacing(actor.facing);
+                  let currCoord = target.coord;
+                  let collided = false;
+                  
+                  for (let step = 0; step < pushDist; step++) {
+                    const nextCoord = hexNeighborInDir(currCoord, pushDir);
+                    const isOnGrid = hexGrid.length === 0 || hexGrid.some(t => hexEquals(t.coord, nextCoord) && t.terrain !== 'obstacle');
+                    const isOccupied = updatedPlayers.some(p => !p.isEliminated && hexEquals(p.coord, nextCoord));
+                    
+                    if (!isOnGrid || isOccupied) {
+                      collided = true;
+                      break;
+                    }
+                    currCoord = nextCoord;
+                  }
+                  
+                  updatedPlayers = updatedPlayers.map(p => {
+                    if (p.id === target.id) {
+                      const finalHp = collided ? Math.max(0, p.hp - 10) : p.hp;
+                      return { 
+                        ...p, 
+                        coord: currCoord, 
+                        hp: finalHp, 
+                        isEliminated: finalHp === 0 
+                      };
+                    }
+                    return p;
+                  });
+                  
+                  if (collided) {
+                    addLog(`${target.name} was knocked back by ${actionCard.name} and collided! Taking 10 extra collision damage.`, 'move', actor.id);
+                  } else {
+                    addLog(`${target.name} was knocked back 1 hex by ${actionCard.name}.`, 'move', actor.id);
+                  }
+                }
+
                 if (isDead) {
                   sound.playElimination();
                   addLog(`💀 ${target.name} WAS ELIMINATED!`, 'elimination', target.id);
@@ -529,6 +595,70 @@ export function useGameState() {
               updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, hp: Math.min(p.maxHp, p.hp + (actionCard.healAmount || 20)) } : p);
               addLog(`${actor.name} cast ${actionCard.name} and healed 20 HP.`, 'system', actor.id);
               sound.playHeal();
+            } else if (actionCard.type === 'push') {
+              const pushDist = actionCard.pushDist || 2;
+              const pushDir = normalizeFacing(actor.facing);
+              const targetHexes = getFrontalTargetHexes(actor.coord, actor.facing, 'frontal', actionCard.range || 1);
+              
+              const hitEnemies = updatedPlayers.filter(p => 
+                p.id !== actor.id && !p.isEliminated && targetHexes.some(th => hexEquals(th, p.coord))
+              );
+
+              if (hitEnemies.length > 0) {
+                hitEnemies.forEach(target => {
+                  let currCoord = target.coord;
+                  let collided = false;
+                  
+                  for (let step = 0; step < pushDist; step++) {
+                    const nextCoord = hexNeighborInDir(currCoord, pushDir);
+                    const isOnGrid = hexGrid.length === 0 || hexGrid.some(t => hexEquals(t.coord, nextCoord) && t.terrain !== 'obstacle');
+                    const isOccupied = updatedPlayers.some(p => !p.isEliminated && hexEquals(p.coord, nextCoord));
+                    
+                    if (!isOnGrid || isOccupied) {
+                      collided = true;
+                      break;
+                    }
+                    currCoord = nextCoord;
+                  }
+                  
+                  const targetId = target.id;
+                  updatedPlayers = updatedPlayers.map(p => {
+                    if (p.id === targetId) {
+                      const finalHp = collided ? Math.max(0, p.hp - 10) : p.hp;
+                      return { 
+                        ...p, 
+                        coord: currCoord, 
+                        hp: finalHp, 
+                        isEliminated: finalHp === 0 
+                      };
+                    }
+                    return p;
+                  });
+                  
+                  if (collided) {
+                    addLog(`${actor.name} pushed ${target.name} back with ${actionCard.name}, colliding with a barrier or unit! ${target.name} takes 10 collision damage.`, 'move', actor.id);
+                  } else {
+                    addLog(`${actor.name} pushed ${target.name} back ${pushDist} hexes with ${actionCard.name}.`, 'move', actor.id);
+                  }
+                });
+                
+                sound.playHeavyHit();
+                
+                setCurrentAnimation({
+                  actorId: actor.id,
+                  targetCoords: targetHexes,
+                  actionName: actionCard.name,
+                  effectType: 'push',
+                });
+              } else {
+                addLog(`${actor.name} cast ${actionCard.name}, but no enemies were in range to push!`, 'system', actor.id);
+                setCurrentAnimation({
+                  actorId: actor.id,
+                  targetCoords: targetHexes,
+                  actionName: actionCard.name,
+                  effectType: 'miss',
+                });
+              }
             }
           }
         }
@@ -651,7 +781,8 @@ export function useGameState() {
 
   // Handle Auto-Play timer for resolution playback
   useEffect(() => {
-    if (gamePhase === 'resolving' && isAutoPlay) {
+    const isClient = !!multiplayerService.roomCode && !multiplayerService.isHost;
+    if (gamePhase === 'resolving' && isAutoPlay && !isClient) {
       const intervalMs = playSpeed === 1 ? 1200 : playSpeed === 2 ? 650 : 320;
       autoPlayTimerRef.current = setTimeout(() => {
         executeNextStep();
@@ -662,11 +793,38 @@ export function useGameState() {
     };
   }, [gamePhase, isAutoPlay, playSpeed, resolvingTurnOrder, currentSlotIndex, executeNextStep]);
 
+  // Host state synchronization broadcast
+  useEffect(() => {
+    if (multiplayerService.isHost && gamePhase === 'resolving') {
+      multiplayerService.sendMessage({
+        type: 'SYNC_GAME_STATE',
+        senderPeerId: multiplayerService.peerId || '',
+        payload: {
+          players,
+          hexGrid,
+          currentSlotIndex,
+          resolvingTurnOrder,
+          gamePhase,
+          currentAnimation,
+          battleLog,
+          round,
+          winner,
+        }
+      });
+    }
+  }, [players, hexGrid, currentSlotIndex, resolvingTurnOrder, gamePhase, currentAnimation, battleLog, round, winner]);
+
   // Calculate 3-slot Projected Intent Trajectories
   const projectedIntents = useMemo(() => {
     const intents: ProjectedIntent[] = [];
     players.forEach(p => {
       if (p.isEliminated) return;
+
+      // Hide intent of other players during planning phase
+      if (gamePhase === 'planning' && p.id !== localPlayerId) {
+        return;
+      }
+
       const startState = roundStartStates[p.id];
       let currCoord = startState ? startState.coord : (p.roundStartCoord || p.coord);
       let currFacing = startState ? startState.facing : (p.roundStartFacing !== undefined ? p.roundStartFacing : p.facing);
@@ -712,7 +870,7 @@ export function useGameState() {
       });
     });
     return intents;
-  }, [players, hexGrid, roundStartStates]);
+  }, [players, hexGrid, roundStartStates, gamePhase, localPlayerId]);
 
   return {
     gamePhase,

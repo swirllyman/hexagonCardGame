@@ -209,6 +209,11 @@ class MultiplayerService {
     this.disconnectListeners.forEach((fn) => fn(peerId));
   }
 
+  public disconnectAllPeers() {
+    this.connections.forEach((conn) => conn.close());
+    this.connections.clear();
+  }
+
   // Disconnect & cleanup
   public disconnect() {
     this.connections.forEach((conn) => conn.close());

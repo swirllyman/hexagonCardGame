@@ -12,6 +12,7 @@ interface HexMapProps {
   currentActorId?: string;
   currentAnimation: StepAnimationState | null;
   projectedIntents?: ProjectedIntent[];
+  localPlayerId?: string;
   onHexHover: (coord: AxialCoord | null) => void;
   onHexClick: (coord: AxialCoord) => void;
 }
@@ -89,10 +90,11 @@ export const HexMap: React.FC<HexMapProps> = ({
   currentActorId,
   currentAnimation,
   projectedIntents = [],
+  localPlayerId,
   onHexHover,
   onHexClick,
 }) => {
-  const humanPlayer = players.find(p => p.id === 'player1');
+  const localPlayer = players.find(p => p.id === localPlayerId) || players.find(p => !p.isAi) || players[0];
 
   return (
     <div className="relative w-full h-full max-h-full fantasy-panel rounded-2xl border border-amber-600/30 shadow-2xl flex items-center justify-center overflow-hidden">
@@ -122,8 +124,8 @@ export const HexMap: React.FC<HexMapProps> = ({
           const occupant = players.find(p => !p.isEliminated && hexEquals(p.coord, tile.coord));
 
           // Distance check for targeting highlights
-          const distFromHuman = humanPlayer ? hexDistance(humanPlayer.coord, tile.coord) : 99;
-          const isInRange = selectedCard && distFromHuman <= selectedCard.range && distFromHuman > 0;
+          const distFromLocal = localPlayer ? hexDistance(localPlayer.coord, tile.coord) : 99;
+          const isInRange = selectedCard && distFromLocal <= selectedCard.range && distFromLocal > 0;
 
           // Animation highlight targets
           const isAnimTarget = currentAnimation?.targetCoords?.some(tc => hexEquals(tc, tile.coord));
@@ -461,6 +463,61 @@ export const HexMap: React.FC<HexMapProps> = ({
             </foreignObject>
           );
         })}
+
+        {/* Rune Tooltip Overlay */}
+        {(() => {
+          const hoveredTile = hexGrid.find(t => hoveredHex && hexEquals(t.coord, hoveredHex));
+          if (!hoveredTile || hoveredTile.terrain !== 'rune') return null;
+
+          const pixel = hexToPixel(hoveredTile.coord, HEX_RADIUS, CENTER);
+          const cd = hoveredTile.runeCooldown || 0;
+          const isReady = cd === 0;
+
+          let accentColor = '#f59e0b';
+          let title = 'EMPOWER RUNE';
+          let desc = '+10 Damage for 2 turns';
+
+          if (hoveredTile.runeEffect === 'heal') {
+            accentColor = '#10b981';
+            title = 'VITALITY RUNE';
+            desc = '+15 HP & +5 HP Regen';
+          } else if (hoveredTile.runeEffect === 'shield') {
+            accentColor = '#38bdf8';
+            title = 'SHIELD RUNE';
+            desc = '+15 Shield & +5 Shield/turn';
+          }
+
+          return (
+            <g transform={`translate(${pixel.x}, ${pixel.y - 58})`} className="pointer-events-none z-50">
+              {/* Tooltip Card Panel */}
+              <rect
+                x="-80"
+                y="-32"
+                width="160"
+                height="54"
+                rx="8"
+                fill="#090d16"
+                stroke={accentColor}
+                strokeWidth="1.8"
+                opacity="0.95"
+              />
+              {/* Little anchor arrow pointing down */}
+              <polygon
+                points="-6,22 6,22 0,28"
+                fill={accentColor}
+              />
+              <text y="-18" textAnchor="middle" fill="#ffffff" fontSize="9" fontWeight="extrabold" fontFamily="monospace" letterSpacing="0.5">
+                {title}
+              </text>
+              <text y="-5" textAnchor="middle" fill="#94a3b8" fontSize="8" fontFamily="monospace">
+                {desc}
+              </text>
+              <text y="9" textAnchor="middle" fill={isReady ? "#34d399" : "#f43f5e"} fontSize="7.5" fontWeight="bold" fontFamily="monospace">
+                {isReady ? "✦ READY TO CLAIM ✦" : `⌛ RESPAWNS IN ${cd} ROUNDS`}
+              </text>
+            </g>
+          );
+        })()}
       </svg>
 
       {/* Map Legend Overlay */}

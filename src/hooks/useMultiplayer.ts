@@ -56,6 +56,37 @@ export function useMultiplayer() {
     []
   );
 
+  // Leave room
+  const leaveRoom = useCallback(() => {
+    multiplayerService.disconnect();
+    setRole('single');
+    setRoomCode(null);
+    setLocalPeerId(null);
+    setLocalPlayerId('player1');
+    setConnectedPeers([]);
+  }, []);
+
+  // Kick all players (Host only)
+  const kickAllPeers = useCallback(() => {
+    if (multiplayerService.isHost) {
+      multiplayerService.disconnectAllPeers();
+      setSeats((prevSeats) =>
+        prevSeats.map((seat) => {
+          if (seat.peerId && seat.peerId !== localPeerId) {
+            return {
+              ...seat,
+              peerId: undefined,
+              isAi: true,
+              name: `Bot ${seat.id.replace('player', 'P')}`,
+            };
+          }
+          return seat;
+        })
+      );
+      setConnectedPeers((prevPeers) => prevPeers.filter((p) => p.peerId === localPeerId));
+    }
+  }, [localPeerId]);
+
   // Listen for peer network messages
   useEffect(() => {
     const unsubscribeMessage = multiplayerService.onMessage((msg: NetworkMessage) => {
@@ -240,6 +271,8 @@ export function useMultiplayer() {
           });
           return updatedPeers;
         });
+      } else {
+        leaveRoom();
       }
     });
 
@@ -248,7 +281,7 @@ export function useMultiplayer() {
       unsubscribeConnect();
       unsubscribeDisconnect();
     };
-  }, [seats, broadcastLobbyState]);
+  }, [seats, broadcastLobbyState, leaveRoom]);
 
   // Host a room
   const hostRoom = useCallback(
@@ -488,15 +521,7 @@ export function useMultiplayer() {
     });
   }, []);
 
-  // Leave room
-  const leaveRoom = useCallback(() => {
-    multiplayerService.disconnect();
-    setRole('single');
-    setRoomCode(null);
-    setLocalPeerId(null);
-    setLocalPlayerId('player1');
-    setConnectedPeers([]);
-  }, []);
+
 
   return {
     role,
@@ -518,6 +543,7 @@ export function useMultiplayer() {
     updateSeats,
     sendEmote,
     sendLockInQueue,
+    kickAllPeers,
     leaveRoom,
   };
 }

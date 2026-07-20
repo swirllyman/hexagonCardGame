@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import type { PlayerState } from '../types/game';
+import type { PlayerState, BattleLogEntry } from '../types/game';
 import confetti from 'canvas-confetti';
 import { Trophy, RotateCcw, Skull, Swords } from 'lucide-react';
 
@@ -7,6 +7,7 @@ interface GameOverModalProps {
   winner: PlayerState | null;
   players: PlayerState[];
   round: number;
+  battleLog: BattleLogEntry[];
   onRestart: () => void;
 }
 
@@ -14,6 +15,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   winner,
   players,
   round,
+  battleLog,
   onRestart,
 }) => {
   useEffect(() => {
@@ -67,6 +69,32 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             </div>
           ))}
         </div>
+
+        {/* Final Timeline Chronology */}
+        {battleLog && battleLog.length > 0 && (
+          <div className="w-full bg-slate-950/90 border border-slate-800 rounded-2xl p-3 flex flex-col gap-1.5 max-h-48 overflow-y-auto shadow-inner">
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-amber-400 border-b border-slate-800 pb-1 text-left font-mono">
+              Final Chronology (Recent Log)
+            </h4>
+            <div className="flex flex-col gap-1 text-left text-[10px] font-mono leading-normal">
+              {battleLog.slice(0, 15).map((log) => {
+                let colorClass = 'text-slate-400';
+                if (log.type === 'elimination') colorClass = 'text-rose-500 font-extrabold';
+                else if (log.type === 'attack') colorClass = 'text-rose-300';
+                else if (log.type === 'rune') colorClass = 'text-emerald-400 font-semibold';
+                else if (log.type === 'move') colorClass = 'text-emerald-300';
+                else if (log.type === 'system') colorClass = 'text-amber-300';
+
+                return (
+                  <div key={log.id} className="py-0.5 border-b border-slate-900/50 flex gap-1 items-start">
+                    <span className="text-slate-600 shrink-0">[{log.timestamp}]</span>
+                    <span className={colorClass}>{log.text}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Play Again CTA */}
         <button
