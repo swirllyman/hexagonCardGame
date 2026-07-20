@@ -48,7 +48,7 @@ export function useGameState() {
   const [resolvingTurnOrder, setResolvingTurnOrder] = useState<number>(0);
 
   const [players, setPlayers] = useState<PlayerState[]>([]);
-  const [roundStartStates, setRoundStartStates] = useState<Record<PlayerId, { coord: AxialCoord; facing: number }>>({});
+  const [roundStartStates, setRoundStartStates] = useState<Record<PlayerId, { coord: AxialCoord; facing: number }>>({} as Record<PlayerId, { coord: AxialCoord; facing: number }>);
   const [hexGrid, setHexGrid] = useState<HexTile[]>([]);
   const [battleLog, setBattleLog] = useState<BattleLogEntry[]>([]);
   
