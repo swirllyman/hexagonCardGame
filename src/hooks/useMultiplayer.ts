@@ -21,10 +21,10 @@ export function useMultiplayer() {
   const [connectError, setConnectError] = useState<string | null>(null);
 
   const [seats, setSeats] = useState<MultiplayerSeat[]>([
-    { id: 'player1', name: 'Commander Valerius', isAi: false, aiDifficulty: 'medium' },
-    { id: 'player2', name: 'Bot Kaelen', isAi: true, aiDifficulty: 'medium' },
-    { id: 'player3', name: 'Bot Seraphina', isAi: true, aiDifficulty: 'medium' },
-    { id: 'player4', name: 'Bot Ignis', isAi: true, aiDifficulty: 'medium' },
+    { id: 'player1', name: 'Commander Valerius', isAi: false, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_valerius.svg' },
+    { id: 'player2', name: 'Bot Kaelen', isAi: true, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_kaelen.svg' },
+    { id: 'player3', name: 'Bot Seraphina', isAi: true, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_seraphina.svg' },
+    { id: 'player4', name: 'Bot Ignis', isAi: true, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_ignis.svg' },
   ]);
 
   const [connectedPeers, setConnectedPeers] = useState<ConnectedPeer[]>([]);
@@ -300,10 +300,10 @@ export function useMultiplayer() {
         setLocalPlayerName(initialHostName);
 
         const initialSeats: MultiplayerSeat[] = [
-          { id: 'player1', name: initialHostName, isAi: false, peerId, aiDifficulty: 'medium' },
-          { id: 'player2', name: 'Bot Kaelen', isAi: true, aiDifficulty: 'medium' },
-          { id: 'player3', name: 'Bot Seraphina', isAi: true, aiDifficulty: 'medium' },
-          { id: 'player4', name: 'Bot Ignis', isAi: true, aiDifficulty: 'medium' },
+          { id: 'player1', name: initialHostName, isAi: false, peerId, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_valerius.svg' },
+          { id: 'player2', name: 'Bot Kaelen', isAi: true, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_kaelen.svg' },
+          { id: 'player3', name: 'Bot Seraphina', isAi: true, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_seraphina.svg' },
+          { id: 'player4', name: 'Bot Ignis', isAi: true, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_ignis.svg' },
         ];
 
         const initialConnectedPeers: ConnectedPeer[] = [

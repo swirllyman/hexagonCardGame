@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import type { Card } from '../types/game';
 import { DEFAULT_MOVE_CARDS } from '../utils/cardsData';
 import { CardTooltip } from './CardTooltip';
@@ -27,6 +27,7 @@ interface CardHandProps {
   selectedCard: Card | null;
   isLocked: boolean;
   onSelectCard: (card: Card) => void;
+  onDoubleClickCard?: (card: Card) => void;
 }
 
 const CATEGORY_STYLES = {
@@ -73,8 +74,28 @@ export const CardHand: React.FC<CardHandProps> = ({
   selectedCard,
   isLocked,
   onSelectCard,
+  onDoubleClickCard,
 }) => {
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
+  const lastClickRef = useRef<{ cardId: string; time: number } | null>(null);
+
+  const handleCardClick = (card: Card, isQueued: boolean) => {
+    if (isLocked || isQueued) return;
+    const now = Date.now();
+    if (
+      lastClickRef.current &&
+      lastClickRef.current.cardId === card.id &&
+      now - lastClickRef.current.time < 350
+    ) {
+      lastClickRef.current = null;
+      if (onDoubleClickCard) {
+        onDoubleClickCard(card);
+      }
+    } else {
+      lastClickRef.current = { cardId: card.id, time: now };
+      onSelectCard(card);
+    }
+  };
 
   const renderCardItem = (card: Card, isMoveCard: boolean, index: number) => {
     const categoryStyle = CATEGORY_STYLES[card.category];
@@ -98,7 +119,7 @@ export const CardHand: React.FC<CardHandProps> = ({
     return (
       <div
         key={card.id}
-        onClick={() => !isLocked && !isQueued && onSelectCard(card)}
+        onClick={() => handleCardClick(card, isQueued)}
         onMouseEnter={() => setHoveredCardId(card.id)}
         onMouseLeave={() => setHoveredCardId(null)}
         className={`relative w-24 h-32 rounded-xl border-2 ${categoryStyle.bg} ${categoryStyle.border} p-1.5 flex flex-col justify-between cursor-pointer transform transition-all duration-200 select-none shadow-lg ${

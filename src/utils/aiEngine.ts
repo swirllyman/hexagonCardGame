@@ -86,6 +86,21 @@ export function programAiTurn(
         score += 30; // Bonus for turn card aligning facing with target
       }
 
+      // Strategic King of the Hill (0,0) Heuristics
+      const isNextOnHill = nextCoord.q === 0 && nextCoord.r === 0;
+      const isCurrentOnHill = currentEstCoord.q === 0 && currentEstCoord.r === 0;
+      const isEnemyOnHill = nearestEnemy.coord.q === 0 && nearestEnemy.coord.r === 0;
+
+      if (isNextOnHill) {
+        score += 65; // High priority bonus for moving to/holding central Hill!
+      } else if (isCurrentOnHill && card.category === 'movement' && !card.turnAmount) {
+        score -= 30; // Mild penalty for leaving the central Hill unless turning
+      }
+
+      if (isEnemyOnHill && card.category === 'attack' && estDist <= (card.range || 1)) {
+        score += 35; // Priority bonus for attacking enemy holding central Hill
+      }
+
       if (card.category === 'attack') {
         if (estDist <= (card.range || 1)) {
           score += 50 + (card.damage || 0);

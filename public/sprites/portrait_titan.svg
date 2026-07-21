@@ -1,65 +1,76 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
   <defs>
+    <!-- Heavy Industrial Metallic Yellow/Black Background -->
     <radialGradient id="titBg" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#eab308" stop-opacity="0.45" />
-      <stop offset="65%" stop-color="#854d0e" stop-opacity="0.25" />
-      <stop offset="100%" stop-color="#1c1917" stop-opacity="0.95" />
+      <stop offset="0%" stop-color="#eab308" stop-opacity="0.5" />
+      <stop offset="65%" stop-color="#854d0e" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#1c1917" stop-opacity="0.98" />
     </radialGradient>
-    <linearGradient id="titArmor" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#44403c" />
-      <stop offset="50%" stop-color="#292524" />
-      <stop offset="100%" stop-color="#0c0a09" />
+
+    <linearGradient id="titPlate" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#78716c" />
+      <stop offset="50%" stop-color="#44403c" />
+      <stop offset="100%" stop-color="#1c1917" />
     </linearGradient>
-    <linearGradient id="titHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#fef08a" />
-      <stop offset="100%" stop-color="#ca8a04" opacity="0.1" />
-    </linearGradient>
+
     <linearGradient id="titYellowGlow" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#fef9c3" />
       <stop offset="40%" stop-color="#eab308" />
       <stop offset="100%" stop-color="#ca8a04" />
     </linearGradient>
+
     <filter id="titGlow" x="-30%" y="-30%" width="160%" height="160%">
       <feGaussianBlur stdDeviation="8" result="blur" />
       <feComposite in="SourceGraphic" in2="blur" operator="over" />
     </filter>
   </defs>
 
-  <circle cx="256" cy="256" r="236" fill="url(#titBg)" stroke="url(#titYellowGlow)" stroke-width="10" />
-  <circle cx="256" cy="256" r="212" fill="none" stroke="#fef08a" stroke-opacity="0.2" stroke-width="3" stroke-dasharray="16 10" />
+  <!-- Industrial Gear Notch Outer Ring -->
+  <circle cx="256" cy="256" r="236" fill="url(#titBg)" stroke="url(#titYellowGlow)" stroke-width="12" />
+  <circle cx="256" cy="256" r="212" fill="none" stroke="#fef08a" stroke-opacity="0.3" stroke-width="4" stroke-dasharray="32 16" />
 
-  <!-- Heavy Mech Bust & Shoulder Armor -->
+  <!-- Massive Hydraulic Mech Shoulder Blocks -->
   <g>
-    <path d="M 80 440 L 135 340 L 210 365 L 175 440 Z" fill="url(#titArmor)" stroke="#ca8a04" stroke-width="4" />
-    <path d="M 100 425 L 135 350 L 195 370" fill="none" stroke="url(#titHighlight)" stroke-width="2" />
-    
-    <path d="M 432 440 L 377 340 L 302 365 L 337 440 Z" fill="url(#titArmor)" stroke="#ca8a04" stroke-width="4" />
-    <path d="M 412 425 L 377 350 L 317 370" fill="none" stroke="url(#titHighlight)" stroke-width="2" />
+    <!-- Left Huge Boxy Shoulder -->
+    <rect x="50" y="310" width="130" height="150" rx="16" fill="url(#titPlate)" stroke="url(#titYellowGlow)" stroke-width="5" />
+    <path d="M 65 330 L 165 330" stroke="#ca8a04" stroke-width="4" />
+    <circle cx="90" cy="360" r="8" fill="#ca8a04" />
 
-    <path d="M 170 440 L 210 360 L 256 380 L 302 360 L 342 440 Z" fill="#1c1917" stroke="url(#titYellowGlow)" stroke-width="4" />
-    <polygon points="256,375 275,410 256,430 237,410" fill="url(#titYellowGlow)" filter="url(#titGlow)" />
-    <path d="M 210 360 L 256 335 L 302 360" fill="#292524" stroke="#eab308" stroke-width="3" />
+    <!-- Right Huge Boxy Shoulder -->
+    <rect x="332" y="310" width="130" height="150" rx="16" fill="url(#titPlate)" stroke="url(#titYellowGlow)" stroke-width="5" />
+    <path d="M 347 330 L 447 330" stroke="#ca8a04" stroke-width="4" />
+    <circle cx="422" cy="360" r="8" fill="#ca8a04" />
+
+    <!-- Mech Chest Grille & Heavy Armor Plate -->
+    <path d="M 160 440 L 190 350 L 256 370 L 322 350 L 352 440 Z" fill="#0c0a09" stroke="#eab308" stroke-width="4" />
+    <line x1="210" y1="380" x2="302" y2="380" stroke="#eab308" stroke-width="4" />
+    <line x1="218" y1="398" x2="294" y2="398" stroke="#eab308" stroke-width="4" />
+    <line x1="226" y1="416" x2="286" y2="416" stroke="#eab308" stroke-width="4" />
   </g>
 
-  <!-- Heavy Neck Guard -->
-  <path d="M 205 335 L 256 350 L 307 335 L 285 295 L 227 295 Z" fill="#0c0a09" stroke="#eab308" stroke-width="3" />
-
-  <!-- Heavy Mech Juggernaut Helmet -->
+  <!-- Heavy Mech Juggernaut Boxy Reinforced Helmet & Monocle Radar Eyes -->
   <g>
-    <path d="M 155 245 C 155 135, 357 135, 357 245 L 335 325 L 256 355 L 177 325 Z" fill="url(#titArmor)" stroke="#eab308" stroke-width="5" />
-    
-    <!-- Reinforced Crest Plate -->
-    <path d="M 256 110 L 280 180 L 256 200 L 232 180 Z" fill="#854d0e" stroke="url(#titYellowGlow)" stroke-width="2" />
+    <!-- Square Fortified Mech Head -->
+    <rect x="160" y="170" width="192" height="170" rx="20" fill="url(#titPlate)" stroke="url(#titYellowGlow)" stroke-width="6" />
 
-    <!-- Cheek Armor -->
-    <path d="M 170 245 L 210 315 L 256 340 L 302 315 L 342 245 L 320 235 L 256 245 L 192 235 Z" fill="#0c0a09" stroke="#ca8a04" stroke-width="4" />
+    <!-- Crown Crest Plate with Exhaust Pipes -->
+    <rect x="236" y="100" width="40" height="80" rx="8" fill="#292524" stroke="#eab308" stroke-width="3" />
+    <rect x="200" y="120" width="24" height="60" rx="6" fill="#1c1917" stroke="#ca8a04" stroke-width="2" />
+    <rect x="288" y="120" width="24" height="60" rx="6" fill="#1c1917" stroke="#ca8a04" stroke-width="2" />
 
-    <!-- Heavy Horizontal Optics Visor -->
+    <!-- Heavy Iron Face Shield with Slits -->
+    <rect x="180" y="220" width="152" height="100" rx="12" fill="#0c0a09" stroke="#78716c" stroke-width="4" />
+
+    <!-- Glowing Hexagonal Single Cyclops Radar Eye -->
     <g filter="url(#titGlow)">
-      <path d="M 180 225 L 332 225 L 310 265 L 256 280 L 202 265 Z" fill="#ca8a04" stroke="url(#titYellowGlow)" stroke-width="4" />
-      <polygon points="195,237 245,237 238,253 202,253" fill="#fef9c3" />
-      <polygon points="317,237 267,237 274,253 310,253" fill="#fef9c3" />
-      <line x1="185" y1="229" x2="327" y2="229" stroke="#ffffff" stroke-width="3" stroke-linecap="round" />
+      <polygon points="256,230 286,245 286,275 256,290 226,275 226,245" fill="#fef9c3" stroke="#eab308" stroke-width="4" />
+      <circle cx="256" cy="260" r="10" fill="#eab308" />
     </g>
+
+    <!-- Side Heavy Bolt Rivets -->
+    <circle cx="175" cy="190" r="5" fill="#eab308" />
+    <circle cx="337" cy="190" r="5" fill="#eab308" />
+    <circle cx="175" cy="320" r="5" fill="#eab308" />
+    <circle cx="337" cy="320" r="5" fill="#eab308" />
   </g>
 </svg>

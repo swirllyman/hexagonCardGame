@@ -22,11 +22,11 @@ export const ActionQueue: React.FC<ActionQueueProps> = ({
   onLockIn,
 }) => {
   const [hoveredSlotIdx, setHoveredSlotIdx] = useState<number | null>(null);
-  const isFull = programmedQueue.every(c => c !== null);
 
   const slotCount = programmedQueue.length;
   const gridColsClass = slotCount === 3 ? 'grid-cols-3' : 'grid-cols-5';
-  const slotHeightClass = slotCount > 5 ? 'h-14' : slotCount === 5 ? 'h-16' : 'h-20';
+  const slotHeightClass = slotCount > 5 ? 'h-16' : slotCount === 5 ? 'h-20' : 'h-24';
+  const imageSizeClass = slotCount > 5 ? 'w-6 h-6' : slotCount === 5 ? 'w-8 h-8' : 'w-10 h-10 sm:w-11 sm:h-11';
 
   return (
     <div className="w-full h-full flex flex-col justify-between bg-slate-950/75 border border-amber-600/20 rounded-xl p-2.5 shadow-inner">
@@ -73,32 +73,34 @@ export const ActionQueue: React.FC<ActionQueueProps> = ({
                 {/* Floating Tooltip when card in slot is hovered */}
                 {isHovered && card && <CardTooltip card={card} position="top" />}
                 {/* Slot Number Badge */}
-                <div className="absolute -top-2 left-1.5 bg-slate-950 border border-slate-800 text-[8px] font-mono font-bold text-slate-400 px-1 py-0.2 rounded-full">
+                <div className="absolute -top-2 left-1.5 bg-slate-950 border border-slate-800 text-[8px] font-mono font-bold text-slate-400 px-1 py-0.2 rounded-full z-20">
                   S{slotIdx + 1}
                 </div>
 
                 {card ? (
-                  <div className="flex flex-col items-center w-full relative h-full justify-between py-0.5">
+                  <div className="flex flex-col items-center justify-center w-full relative h-full gap-1 py-0.5">
                     {!isLocked && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           onUnassignSlot(slotIdx);
                         }}
-                        className="absolute -top-1.5 -right-1.5 text-slate-400 hover:text-rose-400 bg-slate-950 rounded-full p-0.5 border border-slate-800 shadow"
+                        className="absolute -top-1.5 -right-1.5 text-slate-400 hover:text-rose-400 bg-slate-950 rounded-full p-0.5 border border-slate-800 shadow z-20"
                       >
-                        <X className="w-2.5 h-2.5" />
+                        <X className="w-3 h-3" />
                       </button>
                     )}
-                    <SafeImage
-                      src={card.spriteUrl}
-                      alt={card.name}
-                      className="w-5.5 h-5.5 object-contain rounded border border-amber-500/30 my-0.5 shadow-inner"
-                      fallback={
-                        <span className="text-[9px] font-extrabold text-amber-400 my-0.5">{card.name.charAt(0)}</span>
-                      }
-                    />
-                    <span className="text-[8.5px] font-extrabold text-slate-200 line-clamp-1 leading-tight">{card.name}</span>
+                    <div className="flex items-center justify-center bg-slate-900/80 border border-amber-500/40 rounded-lg p-1 shadow-inner">
+                      <SafeImage
+                        src={card.spriteUrl}
+                        alt={card.name}
+                        className={`${imageSizeClass} object-contain`}
+                        fallback={
+                          <span className="text-xs font-extrabold text-amber-400">{card.name.charAt(0)}</span>
+                        }
+                      />
+                    </div>
+                    <span className="text-[9.5px] font-extrabold text-slate-200 line-clamp-1 leading-tight tracking-tight">{card.name}</span>
                   </div>
                 ) : (
                   <div className="text-slate-600 flex flex-col items-center justify-center gap-0.5 h-full opacity-65 hover:opacity-100 transition-opacity">
@@ -115,13 +117,11 @@ export const ActionQueue: React.FC<ActionQueueProps> = ({
       {/* Lock In & Submit Queue Button */}
       <button
         onClick={onLockIn}
-        disabled={!isFull || isLocked}
+        disabled={isLocked}
         className={`w-full py-2.5 mt-2.5 rounded-xl font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-1.5 transition-all duration-300 shadow-md ${
           isLocked
             ? 'bg-slate-900 text-slate-500 border border-slate-800/80 cursor-not-allowed'
-            : isFull
-            ? 'gold-btn animate-pulse hover:scale-[1.02]'
-            : 'bg-slate-900 text-slate-600 border border-slate-800/50 cursor-not-allowed'
+            : 'gold-btn animate-pulse hover:scale-[1.02]'
         }`}
       >
         {isLocked ? (

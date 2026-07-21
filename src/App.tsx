@@ -11,7 +11,7 @@ import { GameSetup } from './components/GameSetup';
 import { GameOverModal } from './components/GameOverModal';
 import { EmoteWheel } from './components/EmoteWheel';
 import { sound } from './utils/sound';
-import { Swords, Volume2, VolumeX, HelpCircle, Shield, RotateCcw, Globe } from 'lucide-react';
+import { Swords, Volume2, VolumeX, HelpCircle, Shield, RotateCcw, Globe, Timer } from 'lucide-react';
 
 export function App() {
   const {
@@ -31,6 +31,7 @@ export function App() {
     winner,
     currentAnimation,
     projectedIntents,
+    floaters,
     localPlayerId,
     setLocalPlayerId,
     initGame,
@@ -57,6 +58,10 @@ export function App() {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [showRules, setShowRules] = useState<boolean>(false);
   const [scale, setScale] = useState<number>(1);
+  const [timeLeft, setTimeLeft] = useState<number>(30);
+
+  const controlledPlayer = players.find((p) => p.id === localPlayerId) || players.find((p) => !p.isAi) || players[0];
+  const isOnlineMatch = multiplayer.role !== 'single';
 
   useEffect(() => {
     const handleResize = () => {
@@ -72,7 +77,36 @@ export function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const controlledPlayer = players.find((p) => p.id === localPlayerId) || players.find((p) => !p.isAi) || players[0];
+  // 30 second timer for online planning phase
+  useEffect(() => {
+    if (!isOnlineMatch || gamePhase !== 'planning') {
+      setTimeLeft(30);
+      return;
+    }
+
+    setTimeLeft(30);
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          // If local player is alive and unlocked, lock them in
+          if (controlledPlayer && !controlledPlayer.isEliminated && !controlledPlayer.isLocked) {
+            lockInPlanning(controlledPlayer.id);
+          } else {
+            // If local player is already eliminated or locked, lock in any active player to trigger phase resolution
+            const unlockedAlive = players.find(p => !p.isEliminated && !p.isLocked);
+            if (unlockedAlive) {
+              lockInPlanning(unlockedAlive.id);
+            }
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isOnlineMatch, gamePhase, round, controlledPlayer?.isLocked, controlledPlayer?.isEliminated, lockInPlanning, controlledPlayer?.id, players]);
 
   const activePlayers = players.filter(p => !p.isEliminated);
   const otherActivePlayers = activePlayers.filter(p => p.id !== controlledPlayer?.id);
@@ -111,6 +145,18 @@ export function App() {
             <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-500/10 border border-amber-500/40 rounded-full font-mono text-[10px] text-amber-300 whitespace-nowrap flex-shrink-0">
               <Globe className="w-3 h-3 text-amber-400" />
               <span>ROOM: {multiplayer.roomCode}</span>
+            </div>
+          )}
+
+          {/* 30s Round Timer Badge (Online) */}
+          {isOnlineMatch && gamePhase === 'planning' && (
+            <div className={`flex items-center gap-1.5 px-3 py-0.5 rounded-full font-mono text-[10px] font-bold border transition-colors flex-shrink-0 ${
+              timeLeft <= 5 
+                ? 'bg-rose-950/80 border-rose-500 text-rose-300 animate-pulse' 
+                : 'bg-amber-950/80 border-amber-500/60 text-amber-300'
+            }`}>
+              <Timer className={`w-3 h-3 ${timeLeft <= 5 ? 'text-rose-400 animate-spin' : 'text-amber-400'}`} />
+              <span>{timeLeft}s</span>
             </div>
           )}
         </div>
@@ -252,6 +298,7 @@ export function App() {
                     }
                     currentAnimation={currentAnimation}
                     projectedIntents={projectedIntents}
+                    floaters={floaters}
                     localPlayerId={localPlayerId}
                     onHexHover={setHoveredHex}
                     onHexClick={() => {}}
@@ -286,6 +333,13 @@ export function App() {
                           setSelectedHandCard(null);
                         } else {
                           setSelectedHandCard(card);
+                        }
+                      }}
+                      onDoubleClickCard={(card) => {
+                        const firstEmptyIdx = controlledPlayer.programmedQueue.findIndex(slot => slot === null);
+                        if (firstEmptyIdx !== -1) {
+                          assignCardToSlot(firstEmptyIdx, card, controlledPlayer.id);
+                          setSelectedHandCard(null);
                         }
                       }}
                     />

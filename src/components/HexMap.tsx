@@ -1,8 +1,20 @@
 import React from 'react';
-import type { HexTile, PlayerState, AxialCoord, StepAnimationState, Card, ProjectedIntent } from '../types/game';
+import type { HexTile, PlayerState, AxialCoord, StepAnimationState, Card, ProjectedIntent, CombatFloater } from '../types/game';
 import { hexToPixel, hexEquals, hexDistance, getFacingAngle } from '../utils/hexGrid';
 import { UnitToken } from './UnitToken';
-import { Flame, Shield, Heart, Landmark } from 'lucide-react';
+import { CombatFloaterOverlay } from './CombatFloaterOverlay';
+import { Flame, Shield, Heart, Landmark, Crown } from 'lucide-react';
+import type { PlayerId } from '../types/game';
+
+function getFactionColor(playerId?: PlayerId | null): string {
+  switch (playerId) {
+    case 'player1': return '#f43f5e';
+    case 'player2': return '#38bdf8';
+    case 'player3': return '#10b981';
+    case 'player4': return '#fbbf24';
+    default: return '#f59e0b';
+  }
+}
 
 interface HexMapProps {
   hexGrid: HexTile[];
@@ -12,6 +24,7 @@ interface HexMapProps {
   currentActorId?: string;
   currentAnimation: StepAnimationState | null;
   projectedIntents?: ProjectedIntent[];
+  floaters?: CombatFloater[];
   localPlayerId?: string;
   onHexHover: (coord: AxialCoord | null) => void;
   onHexClick: (coord: AxialCoord) => void;
@@ -90,6 +103,7 @@ export const HexMap: React.FC<HexMapProps> = ({
   currentActorId,
   currentAnimation,
   projectedIntents = [],
+  floaters = [],
   localPlayerId,
   onHexHover,
   onHexClick,
@@ -141,6 +155,10 @@ export const HexMap: React.FC<HexMapProps> = ({
             fill = 'fill-amber-950/40';
             stroke = 'stroke-amber-500/80';
             strokeWidth = '2';
+          } else if (tile.terrain === 'hill') {
+            fill = 'fill-amber-950/60';
+            stroke = tile.hillController ? 'stroke-amber-400 font-extrabold' : 'stroke-yellow-500/80';
+            strokeWidth = '2.5';
           }
 
           if (isInRange) {
@@ -182,6 +200,76 @@ export const HexMap: React.FC<HexMapProps> = ({
                   <Landmark className="w-3.5 h-3.5 text-slate-400" />
                 </g>
               )}
+
+              {/* King of the Hill (KOTH) Nexus Hex */}
+              {tile.terrain === 'hill' && (() => {
+                const controller = tile.hillController;
+                const progress = tile.hillProgress;
+                const turns = progress ? progress.turnsCount : (controller ? 2 : 0);
+                const activePlayerId = controller || progress?.playerId;
+                const activeColor = getFactionColor(activePlayerId);
+                const isCaptured = !!controller;
+
+                const pip1Lit = turns >= 1;
+                const pip2Lit = turns >= 2;
+
+                return (
+                  <g className="pointer-events-none">
+                    {/* Controlled or Contested Glowing Aura */}
+                    {activePlayerId && (
+                      <circle
+                        cx={pixel.x}
+                        cy={pixel.y}
+                        r={HEX_RADIUS - 8}
+                        fill={activeColor}
+                        fillOpacity={isCaptured ? 0.25 : 0.12}
+                        stroke={activeColor}
+                        strokeWidth={isCaptured ? 2 : 1}
+                        className={isCaptured ? 'animate-pulse' : ''}
+                      />
+                    )}
+
+                    {/* Progress Pips */}
+                    <circle
+                      cx={pixel.x - 9}
+                      cy={pixel.y - HEX_RADIUS + 8}
+                      r={3.8}
+                      fill={pip1Lit ? activeColor : '#1e293b'}
+                      fillOpacity={pip1Lit ? 1 : 0.4}
+                      stroke={pip1Lit ? '#fef08a' : '#475569'}
+                      strokeWidth={1}
+                    />
+                    <circle
+                      cx={pixel.x + 9}
+                      cy={pixel.y - HEX_RADIUS + 8}
+                      r={3.8}
+                      fill={pip2Lit ? activeColor : '#1e293b'}
+                      fillOpacity={pip2Lit ? 1 : 0.4}
+                      stroke={pip2Lit ? '#fef08a' : '#475569'}
+                      strokeWidth={1}
+                    />
+
+                    {/* Central Crown Icon */}
+                    <g transform={`translate(${pixel.x}, ${pixel.y})`}>
+                      {!occupant && (
+                        <>
+                          <g transform="translate(-11, -14)" filter="url(#runeGlowFilter)">
+                            <Crown className={`w-5 h-5 ${isCaptured ? 'text-amber-300 animate-bounce' : 'text-amber-400/90 animate-pulse'}`} />
+                          </g>
+                          <text
+                            x={0}
+                            y={14}
+                            textAnchor="middle"
+                            className="fill-amber-200 text-[8px] font-extrabold tracking-wider font-mono select-none"
+                          >
+                            {isCaptured ? 'KING OF HILL' : turns === 1 ? 'CONTESTING 1/2' : 'NEXUS HILL'}
+                          </text>
+                        </>
+                      )}
+                    </g>
+                  </g>
+                );
+              })()}
 
               {/* Powerup Rune Pickups & Border Cooldown Pips */}
               {tile.terrain === 'rune' && (() => {
@@ -449,22 +537,26 @@ export const HexMap: React.FC<HexMapProps> = ({
 
           const pixel = hexToPixel(player.coord, HEX_RADIUS, CENTER);
           const isActor = currentActorId === player.id;
+          const isLocal = localPlayerId === player.id;
 
           return (
             <foreignObject
               key={player.id}
-              x={pixel.x - 32}
-              y={pixel.y - 36}
-              width={64}
-              height={72}
+              x={pixel.x - 48}
+              y={pixel.y - 54}
+              width={96}
+              height={108}
               className="overflow-visible pointer-events-none transition-all duration-500 ease-out"
             >
               <div className="w-full h-full flex items-center justify-center pointer-events-auto">
-                <UnitToken player={player} isCurrentActor={isActor} />
+                <UnitToken player={player} isCurrentActor={isActor} isLocalPlayer={isLocal} />
               </div>
             </foreignObject>
           );
         })}
+
+        {/* Combat Floater Overlay */}
+        <CombatFloaterOverlay floaters={floaters || []} hexRadius={HEX_RADIUS} center={CENTER} />
 
         {/* Rune Tooltip Overlay */}
         {(() => {

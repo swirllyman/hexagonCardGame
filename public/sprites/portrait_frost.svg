@@ -1,67 +1,68 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
   <defs>
+    <!-- Glacial Ice Cyan/Blue Background -->
     <radialGradient id="froBg" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#67e8f9" stop-opacity="0.45" />
-      <stop offset="65%" stop-color="#0891b2" stop-opacity="0.25" />
-      <stop offset="100%" stop-color="#083344" stop-opacity="0.95" />
+      <stop offset="0%" stop-color="#67e8f9" stop-opacity="0.55" />
+      <stop offset="65%" stop-color="#0891b2" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#083344" stop-opacity="0.98" />
     </radialGradient>
-    <linearGradient id="froArmor" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#334155" />
+
+    <linearGradient id="froIce" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#cffafe" />
       <stop offset="50%" stop-color="#164e63" />
       <stop offset="100%" stop-color="#083344" />
     </linearGradient>
-    <linearGradient id="froHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#cffafe" />
-      <stop offset="100%" stop-color="#06b6d4" opacity="0.1" />
-    </linearGradient>
-    <linearGradient id="froIceGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+
+    <linearGradient id="froGlowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#ecfeff" />
       <stop offset="40%" stop-color="#67e8f9" />
-      <stop offset="100%" stop-color="#0891b2" />
+      <stop offset="100%" stop-color="#0284c7" />
     </linearGradient>
+
     <filter id="froGlow" x="-30%" y="-30%" width="160%" height="160%">
       <feGaussianBlur stdDeviation="8" result="blur" />
       <feComposite in="SourceGraphic" in2="blur" operator="over" />
     </filter>
   </defs>
 
-  <circle cx="256" cy="256" r="236" fill="url(#froBg)" stroke="url(#froIceGlow)" stroke-width="10" />
-  <circle cx="256" cy="256" r="212" fill="none" stroke="#a5f3fc" stroke-opacity="0.2" stroke-width="3" stroke-dasharray="16 10" />
+  <!-- Glacial Crystal Outer Ring -->
+  <circle cx="256" cy="256" r="236" fill="url(#froBg)" stroke="url(#froGlowGrad)" stroke-width="10" />
+  <circle cx="256" cy="256" r="215" fill="none" stroke="#a5f3fc" stroke-opacity="0.35" stroke-width="3" stroke-dasharray="16 8 8 8" />
 
-  <!-- Bust & Shoulder Armor -->
+  <!-- Crystalline Ice Armor Shoulders & Frost Mantle -->
   <g>
-    <path d="M 90 440 L 140 350 L 210 370 L 180 440 Z" fill="url(#froArmor)" stroke="#0891b2" stroke-width="3" />
-    <path d="M 105 425 L 140 360 L 195 375" fill="none" stroke="url(#froHighlight)" stroke-width="2" />
-    
-    <path d="M 422 440 L 372 350 L 302 370 L 332 440 Z" fill="url(#froArmor)" stroke="#0891b2" stroke-width="3" />
-    <path d="M 407 425 L 372 360 L 317 375" fill="none" stroke="url(#froHighlight)" stroke-width="2" />
+    <!-- Left Crystalline Spiked Pauldron -->
+    <polygon points="60,450 120,310 190,340 160,450" fill="url(#froIce)" stroke="url(#froGlowGrad)" stroke-width="4" />
+    <polygon points="40,380 120,310 140,390" fill="#a5f3fc" filter="url(#froGlow)" />
 
-    <path d="M 175 440 L 210 365 L 256 385 L 302 365 L 337 440 Z" fill="#083344" stroke="url(#froIceGlow)" stroke-width="4" />
-    <polygon points="256,380 275,415 256,435 237,415" fill="url(#froIceGlow)" filter="url(#froGlow)" />
-    <path d="M 210 365 L 256 340 L 302 365" fill="#164e63" stroke="#67e8f9" stroke-width="3" />
+    <!-- Right Crystalline Spiked Pauldron -->
+    <polygon points="452,450 392,310 322,340 352,450" fill="url(#froIce)" stroke="url(#froGlowGrad)" stroke-width="4" />
+    <polygon points="472,380 392,310 372,390" fill="#a5f3fc" filter="url(#froGlow)" />
+
+    <!-- Ice Templar Collar & Chest Crystal Gem -->
+    <path d="M 175 440 L 210 355 L 256 375 L 302 355 L 337 440 Z" fill="#083344" stroke="#06b6d4" stroke-width="4" />
+    <polygon points="256,365 278,405 256,430 234,405" fill="url(#froGlowGrad)" filter="url(#froGlow)" />
   </g>
 
-  <!-- Neck Guard -->
-  <path d="M 210 340 L 256 355 L 302 340 L 285 300 L 227 300 Z" fill="#083344" stroke="#67e8f9" stroke-width="3" />
-
-  <!-- Helmet & Ice Templar Visor -->
+  <!-- Ice Templar Greathelm & Sharded Crystal Crown -->
   <g>
-    <path d="M 160 250 C 160 140, 352 140, 352 250 L 330 330 L 256 360 L 182 330 Z" fill="url(#froArmor)" stroke="#67e8f9" stroke-width="5" />
-    
-    <!-- Ice Crystal Crown Peaks -->
-    <polygon points="256,90 276,170 256,190 236,170" fill="#a5f3fc" stroke="url(#froIceGlow)" stroke-width="2" filter="url(#froGlow)" />
-    <polygon points="190,130 220,180 195,190 175,160" fill="#06b6d4" />
-    <polygon points="322,130 337,160 317,190 292,180" fill="#06b6d4" />
+    <!-- Templar Bucket Helm Frame -->
+    <path d="M 165 240 C 165 120, 347 120, 347 240 L 330 330 L 256 360 L 182 330 Z" fill="url(#froIce)" stroke="url(#froGlowGrad)" stroke-width="5" />
 
-    <!-- Cheek Armor -->
-    <path d="M 175 250 L 215 320 L 256 345 L 297 320 L 337 250 L 315 240 L 256 250 L 197 240 Z" fill="#083344" stroke="#0891b2" stroke-width="4" />
+    <!-- Sharp Glacial Crystal Crown Peaks -->
+    <polygon points="256,50 280,150 256,180 232,150" fill="#ecfeff" stroke="#67e8f9" stroke-width="3" filter="url(#froGlow)" />
+    <polygon points="190,90 225,160 195,175 165,130" fill="#22d3ee" stroke="#0891b2" stroke-width="2" />
+    <polygon points="322,90 347,130 317,175 287,160" fill="#22d3ee" stroke="#0891b2" stroke-width="2" />
 
-    <!-- Glowing Frost Visor -->
+    <!-- Templar Cross Visor Faceplate -->
+    <path d="M 175 240 L 215 315 L 256 335 L 297 315 L 337 240 L 256 250 Z" fill="#061a24" stroke="#0891b2" stroke-width="4" />
+
+    <!-- Glowing Blue Ice Cross Visor -->
     <g filter="url(#froGlow)">
-      <path d="M 185 230 L 327 230 L 305 270 L 256 285 L 207 270 Z" fill="#0891b2" stroke="url(#froIceGlow)" stroke-width="4" />
-      <polygon points="200,242 245,242 238,258 207,258" fill="#ecfeff" />
-      <polygon points="312,242 267,242 274,258 305,258" fill="#ecfeff" />
-      <line x1="190" y1="234" x2="322" y2="234" stroke="#ffffff" stroke-width="3" stroke-linecap="round" />
+      <!-- Horizontal Eyeslit -->
+      <line x1="185" y1="242" x2="327" y2="242" stroke="#ecfeff" stroke-width="6" stroke-linecap="round" />
+      <!-- Vertical Center Slit -->
+      <line x1="256" y1="215" x2="256" y2="305" stroke="#ecfeff" stroke-width="6" stroke-linecap="round" />
     </g>
   </g>
 </svg>

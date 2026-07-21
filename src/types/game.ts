@@ -35,7 +35,11 @@ export type CardType =
   | 'push' 
   | 'teleport' 
   | 'counter' 
-  | 'meditate';
+  | 'meditate'
+  | 'thunder'
+  | 'iron_wall'
+  | 'frost_nova'
+  | 'vampiric';
 
 export type FacingMoveType = 
   | 'forward' 
@@ -112,7 +116,7 @@ export interface PlayerState {
   buffs?: PlayerBuff[];
 }
 
-export type TerrainType = 'flat' | 'obstacle' | 'rune';
+export type TerrainType = 'flat' | 'obstacle' | 'rune' | 'hill';
 
 export interface HexTile {
   coord: AxialCoord;
@@ -120,6 +124,8 @@ export interface HexTile {
   runeEffect?: 'heal' | 'shield' | 'attackBoost';
   runeCooldown?: number;
   maxRuneCooldown?: number;
+  hillController?: PlayerId | null;
+  hillProgress?: { playerId: PlayerId; turnsCount: number } | null;
 }
 
 export type GamePhase = 'setup' | 'planning' | 'resolving' | 'gameover';
@@ -130,7 +136,7 @@ export interface BattleLogEntry {
   round: number;
   slot?: number;
   text: string;
-  type: 'move' | 'attack' | 'defense' | 'elimination' | 'system' | 'rune';
+  type: 'move' | 'attack' | 'defense' | 'elimination' | 'system' | 'rune' | 'hill';
   playerId?: PlayerId;
 }
 
@@ -162,6 +168,16 @@ export interface ConnectedPeer {
   isHost: boolean;
   isOnline: boolean;
   assignedSeatId?: PlayerId | null;
+}
+
+export type FloaterType = 'damage' | 'crit' | 'shield_absorb' | 'miss' | 'collision' | 'heal' | 'shield_up' | 'rune' | 'hill';
+
+export interface CombatFloater {
+  id: string;
+  coord: AxialCoord;
+  text: string;
+  type: FloaterType;
+  createdAt: number;
 }
 
 export type EmoteType = 'swords' | 'shield' | 'fire' | 'skull' | 'laugh' | 'gg' | 'target';

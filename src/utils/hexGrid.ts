@@ -11,6 +11,7 @@ export const HEX_DIRECTIONS: AxialCoord[] = [
 ];
 
 export const DIRECTION_NAMES = ['East', 'South-East', 'South-West', 'West', 'North-West', 'North-East'];
+export const DIRECTION_SHORT = ['E', 'SE', 'SW', 'W', 'NW', 'NE'];
 
 export function getAxialS(coord: AxialCoord): number {
   return -coord.q - coord.r;
@@ -193,17 +194,18 @@ export function generateHexGrid(mapRadius: number = 4): HexTile[] {
       const coord: AxialCoord = { q, r };
       const distFromCenter = hexDistance({ q: 0, r: 0 }, coord);
 
-      let terrain: 'flat' | 'obstacle' | 'rune' = 'flat';
+      let terrain: 'flat' | 'obstacle' | 'rune' | 'hill' = 'flat';
       let runeEffect: 'heal' | 'shield' | 'attackBoost' | undefined;
       let runeCooldown: number | undefined;
       let maxRuneCooldown: number | undefined;
+      let hillController: HexTile['hillController'] = undefined;
+      let hillProgress: HexTile['hillProgress'] = undefined;
 
-      // Place central rune and obstacle pillars for tactical play
+      // Place central King of the Hill hex, runes, and obstacle pillars
       if (distFromCenter === 0) {
-        terrain = 'rune';
-        runeEffect = 'attackBoost';
-        runeCooldown = 0;
-        maxRuneCooldown = 3;
+        terrain = 'hill';
+        hillController = null;
+        hillProgress = null;
       } else if (distFromCenter === 2 && (q === 0 || r === 0 || q + r === 0)) {
         terrain = 'rune';
         runeEffect = Math.abs(q) === 2 ? 'heal' : 'shield';
@@ -213,7 +215,7 @@ export function generateHexGrid(mapRadius: number = 4): HexTile[] {
         terrain = 'obstacle';
       }
 
-      tiles.push({ coord, terrain, runeEffect, runeCooldown, maxRuneCooldown });
+      tiles.push({ coord, terrain, runeEffect, runeCooldown, maxRuneCooldown, hillController, hillProgress });
     }
   }
 
