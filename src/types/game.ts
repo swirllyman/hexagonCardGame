@@ -198,6 +198,8 @@ export const TEAMS: Record<number, TeamConfig> = {
   },
 };
 
+export type CardAnimStage = 'idle' | 'playing_turn';
+
 export interface PlayedCardRecord {
   player: PlayerState;
   card: Card | null;
@@ -213,6 +215,7 @@ export interface PlayerState {
   faction: FactionId;
   teamId: number;
   avatarUrl?: string;
+  peerId?: string;
   hp: number;
   maxHp: number;
   shield: number;
@@ -263,15 +266,76 @@ export interface BattleLogEntry {
   playerId?: PlayerId;
 }
 
+export type LineStyle = 'beam' | 'lightning' | 'chain' | 'dash_stream' | 'cleave_arc' | 'siphon' | 'shockwave_ring';
+
+export interface LineRendererSpec {
+  style: LineStyle;
+  color: string;
+  glowColor?: string;
+  width?: number;
+  dashArray?: string;
+  durationMs?: number;
+}
+
+export type ParticleType = 
+  | 'fire_sparks' 
+  | 'ice_crystals' 
+  | 'electric_arcs' 
+  | 'blood_drops' 
+  | 'holy_glow' 
+  | 'shadow_mist' 
+  | 'shockwave_rings' 
+  | 'dust_debris'
+  | 'vortex_implode'
+  | 'energy_gather';
+
+export interface ParticleSpec {
+  type: ParticleType;
+  color: string;
+  count: number;
+  spreadRadius?: number;
+  durationMs?: number;
+}
+
+export interface ScreenShakeSpec {
+  intensity: 'mild' | 'medium' | 'heavy';
+  durationMs: number;
+}
+
+export interface ColorFlashSpec {
+  color: string;
+  opacity: number;
+  durationMs: number;
+}
+
+export interface AbilityVFXConfig {
+  travelTimeMs?: number;
+  windupTimeMs?: number;
+  impactTimeMs?: number;
+  lineRenderer?: LineRendererSpec;
+  particles?: ParticleSpec[];
+  screenShake?: ScreenShakeSpec;
+  colorFlash?: ColorFlashSpec;
+  hasGhostTrails?: boolean;
+  hasShockwaveRipple?: boolean;
+}
+
 export interface StepAnimationState {
   actorId: PlayerId;
   fromCoord?: AxialCoord;
   toCoord?: AxialCoord;
   targetCoords?: AxialCoord[];
   actionName: string;
+  cardType?: CardType;
   effectType: 'move' | 'attack' | 'shield' | 'push' | 'heal' | 'miss' | 'collision';
   damageDealt?: number;
+  vfxConfig?: AbilityVFXConfig;
+  phase?: 'windup' | 'travel' | 'impact' | 'decay';
+  startTime?: number;
+  travelTimeMs?: number;
+  totalDurationMs?: number;
 }
+
 
 export type MultiplayerRole = 'single' | 'host' | 'client';
 

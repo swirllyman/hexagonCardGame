@@ -6,6 +6,7 @@ import { CardHand } from './components/CardHand';
 import { ActionQueue } from './components/ActionQueue';
 import { ResolutionOverlay } from './components/ResolutionOverlay';
 import { PlayedCardsDisplay } from './components/PlayedCardsDisplay';
+import { CardAnimationOrchestrator } from './components/CardAnimationOrchestrator';
 import { PlayerStatusPanel } from './components/PlayerStatusPanel';
 import { BattleLog } from './components/BattleLog';
 import { GameSetup } from './components/GameSetup';
@@ -14,7 +15,7 @@ import { GameOverModal } from './components/GameOverModal';
 import { EmoteWheel } from './components/EmoteWheel';
 import { GameLogo } from './components/GameLogo';
 import { sound } from './utils/sound';
-import { Volume2, VolumeX, HelpCircle, Shield, RotateCcw, Globe, Coins, Hourglass, BookOpen, Swords, Gift, Skull, Package, Trophy } from 'lucide-react';
+import { Volume2, VolumeX, HelpCircle, Shield, RotateCcw, Globe, Coins, Hourglass, BookOpen, Swords, Gift, Skull, Trophy } from 'lucide-react';
 
 export function App() {
   const {
@@ -33,7 +34,6 @@ export function App() {
     playSpeed,
     winner,
     currentAnimation,
-    currentPlayedCard,
     previousPlayedCard,
     projectedIntents,
     floaters,
@@ -53,6 +53,9 @@ export function App() {
     setIsAutoPlay,
     setPlaySpeed,
     setGamePhase,
+    clearAnimation,
+    cardAnimStage,
+    animatingRecord,
   } = useGameState();
 
   const multiplayer = useMultiplayer();
@@ -128,7 +131,7 @@ export function App() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isOnlineMatch, gamePhase, round, controlledPlayer?.isLocked, controlledPlayer?.isEliminated, lockInPlanning, controlledPlayer?.id, players]);
+  }, [isOnlineMatch, gamePhase, round, controlledPlayer, lockInPlanning, players]);
 
   const activePlayers = players.filter(p => !p.isEliminated);
   const otherActivePlayers = activePlayers.filter(p => p.id !== controlledPlayer?.id);
@@ -143,9 +146,17 @@ export function App() {
   return (
     <div className="game-viewport">
       <div 
-        className="scale-wrapper text-slate-100 p-2 font-sans select-none"
+        className="scale-wrapper text-slate-100 p-2 font-sans select-none relative"
         style={{ '--ui-scale': scale } as React.CSSProperties}
       >
+        {/* Card Animation Orchestrator (Screenshot 1: Player status slot -> showcase -> Yellow box & Screenshot 2: Yellow box -> showcase -> Red box) */}
+        <CardAnimationOrchestrator
+          cardAnimStage={cardAnimStage}
+          animatingRecord={animatingRecord}
+          players={players}
+          playSpeed={playSpeed}
+        />
+
         {/* Styled Dark Fantasy RPG Top Header Bar */}
       <header className="relative z-[100] h-11 flex-shrink-0 w-full flex items-center justify-between px-3 fantasy-sharp-panel gold-corners-bottom rounded-none backdrop-blur-md shadow-2xl mb-1.5 border-amber-600/50 bg-slate-950/95">
         <div className="flex items-center gap-3 min-w-0">
@@ -328,24 +339,8 @@ export function App() {
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex gap-2 overflow-hidden">
-          {/* Left Vertical Item Dock Column (Concept Art) */}
-          <div className="hidden md:flex flex-col items-center gap-1.5 w-10 flex-shrink-0 py-1 bg-slate-950/80 border border-slate-800 rounded-none z-30 shadow-2xl">
-            {/* Top Chest / Inventory Tab Button */}
-            <button className="w-8 h-8 rounded-none bg-emerald-600/90 border border-emerald-400 text-emerald-100 flex items-center justify-center shadow-lg hover:scale-105 transition-all">
-              <Package className="w-4 h-4" />
-            </button>
-            {/* 8 Item Inventory Slots */}
-            <div className="flex flex-col gap-1.5 mt-1">
-              {[...Array(8)].map((_, i) => (
-                <div key={i} className="w-7 h-7 rounded-none bg-slate-900/90 border border-slate-800 flex items-center justify-center text-[8px] text-slate-600 font-mono hover:border-amber-500/50 transition-colors">
-                  <span className="opacity-40">{i + 1}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
           {/* Left: Vertical Player Status Column */}
-          <div className="hidden lg:flex flex-col w-56 flex-shrink-0 h-full min-h-0 overflow-hidden">
+          <div className="hidden lg:flex flex-col w-64 flex-shrink-0 h-full min-h-0 overflow-hidden">
             <PlayerStatusPanel
               players={players}
               priorityPlayerIdx={priorityPlayerIdx}
@@ -394,6 +389,7 @@ export function App() {
                     localPlayerId={localPlayerId}
                     onHexHover={setHoveredHex}
                     onHexClick={() => {}}
+                    onAnimationComplete={clearAnimation}
                   />
                 </div>
               </div>
@@ -451,10 +447,9 @@ export function App() {
               )}
 
               {gamePhase === 'resolving' && (
-                <div className="w-full flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8 px-1">
-                  {/* Previous Card (Red) & Current Card (Yellow) Display with Hover Tooltip & Who Played Text Box */}
+                <div className="w-full flex flex-col md:flex-row items-center justify-start gap-4 md:gap-8 px-1">
+                  {/* Last Turn (Red) Display with Hover Tooltip & Who Played Text Box */}
                   <PlayedCardsDisplay
-                    currentPlayedCard={currentPlayedCard}
                     previousPlayedCard={previousPlayedCard}
                   />
 

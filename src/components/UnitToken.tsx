@@ -3,7 +3,7 @@ import type { PlayerState, EmotePayload } from '../types/game';
 import { TEAMS } from '../types/game';
 import { getFacingAngle, normalizeFacing, DIRECTION_NAMES } from '../utils/hexGrid';
 import { SafeImage } from './SafeImage';
-import { Shield, Heart, Sword, Flame, Leaf, User, Navigation, Swords, MessageSquare, Skull, Laugh, Target, ShieldAlert } from 'lucide-react';
+import { Shield, Heart, Sword, Flame, Leaf, Navigation, Swords, MessageSquare, Skull, Laugh, Target, ShieldAlert } from 'lucide-react';
 
 interface UnitTokenProps {
   player: PlayerState;
@@ -136,12 +136,6 @@ export const UnitToken: React.FC<UnitTokenProps> = ({ player, isCurrentActor, is
         </div>
       </div>
 
-      {/* YOU Floating Marker */}
-      {isLocalPlayer && (
-        <div className="absolute -top-15 z-40 bg-gradient-to-r from-cyan-400 via-emerald-400 to-cyan-400 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full shadow-[0_0_14px_rgba(34,211,238,0.9)] tracking-widest uppercase flex items-center gap-1 border border-cyan-200 animate-bounce">
-          <User className="w-2.5 h-2.5 fill-slate-950" /> YOU
-        </div>
-      )}
 
       {/* Active turn golden rune aura */}
       {isCurrentActor && (
@@ -220,6 +214,21 @@ export const UnitToken: React.FC<UnitTokenProps> = ({ player, isCurrentActor, is
             isLocalPlayer ? 'ring-1 ring-cyan-400/60 shadow-[0_0_8px_rgba(34,211,238,0.5)]' : crest.glow
           } flex items-center justify-center text-white font-extrabold text-xs shadow-2xl relative cursor-pointer transform hover:scale-110 transition-all duration-200 z-20 overflow-hidden bg-slate-950`}
         >
+          {/* Active Status Aura Rings */}
+          {player.buffs && player.buffs.length > 0 && (
+            <div className="absolute inset-0 rounded-full pointer-events-none z-10 opacity-70">
+              {player.buffs.some(b => b.type === 'attackBoost') && (
+                <div className="absolute -inset-1 rounded-full border-2 border-rose-500/80 shadow-[0_0_12px_rgba(244,63,94,0.9)] animate-pulse" />
+              )}
+              {player.buffs.some(b => b.type === 'unyielding') && (
+                <div className="absolute -inset-1.5 rounded-full border-2 border-amber-300 shadow-[0_0_14px_rgba(251,191,36,1)] animate-pulse" />
+              )}
+              {player.buffs.some(b => b.type === 'healRegen') && (
+                <div className="absolute -inset-1 rounded-full border border-emerald-400/90 shadow-[0_0_10px_rgba(16,185,129,0.9)] animate-ping" />
+              )}
+            </div>
+          )}
+
           <SafeImage
             src={avatarSrc}
             alt={player.name}

@@ -4,6 +4,7 @@ import { hexToPixel, hexEquals, hexDistance, getFacingAngle, hexNeighborInDir, n
 import { UnitToken } from './UnitToken';
 import { CombatFloaterOverlay } from './CombatFloaterOverlay';
 import { BloodParticleOverlay } from './BloodParticleOverlay';
+import { AbilityVFXOverlay } from './AbilityVFXOverlay';
 import { Flame, Shield, Heart, Landmark, Crown } from 'lucide-react';
 import type { PlayerId } from '../types/game';
 
@@ -33,6 +34,7 @@ interface HexMapProps {
   localPlayerId?: string;
   onHexHover: (coord: AxialCoord | null) => void;
   onHexClick: (coord: AxialCoord) => void;
+  onAnimationComplete?: () => void;
 }
 
 const HEX_RADIUS = 48;
@@ -116,6 +118,7 @@ export const HexMap: React.FC<HexMapProps> = ({
   localPlayerId,
   onHexHover,
   onHexClick,
+  onAnimationComplete,
 }) => {
   const localPlayer = players.find(p => p.id === localPlayerId) || players.find(p => !p.isAi) || players[0];
 
@@ -127,10 +130,35 @@ export const HexMap: React.FC<HexMapProps> = ({
     return true;
   });
 
+  const [shakeOffset, setShakeOffset] = React.useState({ x: 0, y: 0 });
+
+  const handleShakeTrigger = React.useCallback((intensity: string, durationMs: number) => {
+    const mult = intensity === 'heavy' ? 14 : intensity === 'medium' ? 8 : 4;
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= durationMs) {
+        clearInterval(interval);
+        setShakeOffset({ x: 0, y: 0 });
+      } else {
+        const decay = 1 - (elapsed / durationMs);
+        setShakeOffset({
+          x: (Math.random() - 0.5) * mult * decay,
+          y: (Math.random() - 0.5) * mult * decay,
+        });
+      }
+    }, 25);
+  }, []);
+
   return (
     <div className="relative w-full h-full max-h-full bg-transparent flex items-center justify-center overflow-hidden">
 
-      <svg className="w-full h-full relative z-10 select-none overflow-visible" viewBox="0 0 760 640" preserveAspectRatio="xMidYMid meet">
+      <svg
+        className="w-full h-full relative z-10 select-none overflow-visible transition-transform duration-75"
+        style={{ transform: `translate(${shakeOffset.x.toFixed(1)}px, ${shakeOffset.y.toFixed(1)}px)` }}
+        viewBox="0 0 760 640"
+        preserveAspectRatio="xMidYMid meet"
+      >
         <defs>
           <filter id="runeGlowFilter" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation="3" result="blur" />
@@ -725,6 +753,16 @@ export const HexMap: React.FC<HexMapProps> = ({
             </foreignObject>
           );
         })}
+
+        {/* Realtime Ability & Spell Visual Effects (Line Renderers, Particles, Screen Flashes) */}
+        <AbilityVFXOverlay
+          currentAnimation={currentAnimation}
+          players={players}
+          hexRadius={HEX_RADIUS}
+          center={CENTER}
+          onShakeTrigger={handleShakeTrigger}
+          onAnimationComplete={onAnimationComplete}
+        />
 
         {/* Blood Particle Overlay */}
         <BloodParticleOverlay bursts={bloodBursts || []} hexRadius={HEX_RADIUS} center={CENTER} />

@@ -46,7 +46,7 @@ export const ResolutionOverlay: React.FC<ResolutionOverlayProps> = ({
           {/* Play/Pause Auto-step */}
           <button
             onClick={onToggleAutoPlay}
-            className={`flex-1 py-2 rounded-xl font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md ${
+            className={`min-w-[180px] py-2 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md whitespace-nowrap ${
               isAutoPlay
                 ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 border border-amber-300'
                 : 'bg-emerald-600 text-white hover:bg-emerald-500 border border-emerald-400'

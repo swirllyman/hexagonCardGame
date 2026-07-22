@@ -16,12 +16,10 @@ import {
   ShieldAlert, 
   HeartPulse, 
   Info,
-  Clock,
-  Sparkle
+  Clock
 } from 'lucide-react';
 
 interface PlayedCardsDisplayProps {
-  currentPlayedCard: PlayedCardRecord | null;
   previousPlayedCard: PlayedCardRecord | null;
 }
 
@@ -65,107 +63,93 @@ function getFacingBadgeText(card: Card): string | null {
 }
 
 export const PlayedCardsDisplay: React.FC<PlayedCardsDisplayProps> = ({
-  currentPlayedCard,
   previousPlayedCard,
 }) => {
-  const [hoveredCardType, setHoveredCardType] = useState<'previous' | 'current' | null>(null);
+  const [isHovered, setIsHovered] = useState<boolean>(false);
 
-  const renderSingleCardSlot = (
-    record: PlayedCardRecord | null,
-    type: 'previous' | 'current'
-  ) => {
-    const isCurrent = type === 'current';
-    const card = record?.card || null;
-    const player = record?.player || null;
-    const isHovered = hoveredCardType === type;
+  const card = previousPlayedCard?.card || null;
+  const player = previousPlayedCard?.player || null;
+  const categoryStyle = card ? CATEGORY_STYLES[card.category] : null;
+  const facingBadge = card ? getFacingBadgeText(card) : null;
 
-    // Color definitions for highlights
-    // Red for Previous, Yellow for Current
-    const borderColor = isCurrent 
-      ? 'border-yellow-400 border-2 shadow-[0_0_20px_rgba(250,204,21,0.6)]' 
-      : 'border-red-500 border-2 shadow-[0_0_20px_rgba(239,68,68,0.6)]';
+  return (
+    <div className="flex flex-col items-center gap-1.5 bg-slate-950/80 border border-slate-800 p-2 rounded-none backdrop-blur-md shadow-2xl">
+      <div 
+        className="relative flex flex-col items-center gap-1.5 group cursor-pointer"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        {/* Full Detailed Tooltip on Hover */}
+        {isHovered && card && (
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 z-[250] pointer-events-none drop-shadow-2xl animate-fade-in">
+            <CardTooltip card={card} />
+          </div>
+        )}
 
-    const headerBadge = isCurrent
-      ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/80'
-      : 'bg-red-500/20 text-red-300 border-red-400/80';
+        {/* Card Box Slot: Red outline for Last Turn */}
+        <div className={`relative w-24 h-32 sm:w-28 sm:h-36 fantasy-sharp-panel gold-corners-bottom p-1.5 flex flex-col justify-between transition-all duration-200 border-red-500 border-2 shadow-[0_0_18px_rgba(239,68,68,0.5)] ${
+          card ? (categoryStyle?.bg || 'bg-slate-950') : 'bg-slate-950/90'
+        }`}>
+          {/* Header Label: LAST TURN */}
+          <div className="flex items-center justify-between border-b border-slate-800/80 pb-0.5 mb-0.5">
+            <span className="text-[7.5px] sm:text-[8.5px] font-mono font-bold uppercase tracking-wider flex items-center gap-1 px-1 py-0.2 bg-red-500/20 text-red-300 border border-red-400/80">
+              <Clock className="w-2.5 h-2.5 text-red-400" />
+              LAST TURN
+            </span>
+            {previousPlayedCard && (
+              <span className="text-[7px] font-mono text-slate-400">
+                Turn #{previousPlayedCard.stepNumber}
+              </span>
+            )}
+          </div>
 
-    const headerTitle = isCurrent ? '⚡ CURRENT CARD' : '⏪ LAST TURN';
-    const headerIcon = isCurrent ? <Sparkle className="w-3 h-3 text-yellow-400 animate-pulse" /> : <Clock className="w-3 h-3 text-red-400" />;
-
-    const categoryStyle = card ? CATEGORY_STYLES[card.category] : null;
-    const facingBadge = card ? getFacingBadgeText(card) : null;
-
-    return (
-      <div className="flex flex-col items-center gap-1.5 min-w-0">
-        {/* Top Header Tag */}
-        <div className={`flex items-center gap-1 text-[9px] font-mono font-black uppercase tracking-wider px-2 py-0.5 border rounded-none shadow-md ${headerBadge}`}>
-          {headerIcon}
-          <span>{headerTitle}</span>
-        </div>
-
-        {/* Card Box Frame */}
-        <div
-          onMouseEnter={() => setHoveredCardType(type)}
-          onMouseLeave={() => setHoveredCardType(null)}
-          className={`relative w-20 sm:w-22 h-28 sm:h-30 rounded-none p-1.5 flex flex-col justify-between select-none cursor-pointer transition-all duration-200 ${borderColor} ${
-            card ? (categoryStyle?.bg || 'bg-slate-950') : 'bg-slate-950/80 border-dashed opacity-60'
-          } ${isHovered ? 'scale-105 z-50 shadow-2xl' : 'z-10'}`}
-        >
-          {/* Full Detail Hover Tooltip */}
-          {isHovered && card && <CardTooltip card={card} position="top" />}
-
+          {/* Card Content / Graphic */}
           {card ? (
             <>
-              {/* Card Category Header */}
-              <div className="flex items-center justify-between gap-0.5 w-full overflow-hidden">
-                <span className={`text-[6px] uppercase font-mono font-bold px-0.5 py-0.5 rounded-none border whitespace-nowrap shrink-0 leading-none ${categoryStyle?.badge}`}>
+              {/* Category Badge & Icon */}
+              <div className="flex items-center justify-between">
+                <span className={`text-[7px] font-mono font-bold px-1 py-0.2 rounded-none border ${categoryStyle?.badge}`}>
                   {categoryStyle?.label}
                 </span>
-                <span className="text-[6px] font-mono font-bold text-amber-300 bg-amber-950/80 border border-amber-500/40 px-0.5 py-0.5 rounded-none flex items-center gap-0.5 whitespace-nowrap shrink-0 leading-none shadow-inner">
-                  🎯 {card.range === 0 ? 'Self' : `R${card.range}`}
-                </span>
+                <div className={`p-0.5 rounded-none border border-slate-700/60 bg-slate-900/80 ${categoryStyle?.text}`}>
+                  {renderCardIcon(card.iconName, 'w-3 h-3')}
+                </div>
               </div>
 
-              {/* Central Card Graphic Icon / Sprite */}
-              <div className="flex flex-col items-center my-0.5">
+              {/* Card Sprite / Title */}
+              <div className="flex flex-col items-center justify-center gap-0.5 my-auto">
                 <SafeImage
                   src={card.spriteUrl}
                   alt={card.name}
-                  className="w-5 h-5 object-contain rounded-none shadow border border-amber-500/50 mb-0.5"
+                  className="w-7 h-7 sm:w-8 sm:h-8 object-contain rounded-none shadow border border-amber-500/40"
                   fallback={
-                    <div className={`p-1 rounded-none bg-slate-950/90 border border-amber-600/40 ${categoryStyle?.text} mb-0.5 shadow-inner`}>
-                      {renderCardIcon(card.iconName, 'w-2.5 h-2.5')}
+                    <div className={`p-1 rounded-none bg-slate-900 border border-slate-700 ${categoryStyle?.text}`}>
+                      {renderCardIcon(card.iconName, 'w-4 h-4')}
                     </div>
                   }
                 />
-                <h4 className="text-[8px] font-extrabold text-slate-100 text-center leading-tight tracking-tight">{card.name}</h4>
-              </div>
+                <span className="text-[8.5px] sm:text-[9.5px] font-extrabold text-slate-100 text-center leading-tight tracking-tight truncate max-w-full">
+                  {card.name}
+                </span>
 
-              {/* Card Facing Badge */}
-              <div className="flex items-center justify-center my-0.5">
-                {facingBadge ? (
-                  <span className="inline-flex items-center gap-0.5 text-[6.5px] font-mono font-bold text-amber-300 bg-amber-950/90 px-1 py-0.2 rounded-none border border-amber-500/40 whitespace-nowrap shadow-inner">
+                {facingBadge && (
+                  <span className="text-[6.5px] font-mono font-bold text-amber-300 bg-slate-900/90 px-1 py-0.2 border border-amber-500/40">
                     {facingBadge}
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-0.5 text-[6.5px] font-mono text-slate-400 bg-slate-900/60 px-1 py-0.2 rounded-none border border-slate-800 whitespace-nowrap">
-                    Standard
                   </span>
                 )}
               </div>
 
-              {/* Card Stats Footer */}
-              <div className="flex items-center justify-center gap-1 border-t border-slate-800/80 pt-0.5 font-mono">
+              {/* Range & Stat Row */}
+              <div className="border-t border-slate-800/80 pt-0.5 flex items-center justify-between font-mono text-[7px]">
+                <span className="text-slate-400">
+                  🎯 {card.range === 0 ? 'Self' : `R${card.range}`}
+                </span>
                 {card.damage ? (
-                  <span className="text-[7.5px] font-bold text-rose-400 flex items-center gap-0.5">
+                  <span className="text-rose-400 font-bold flex items-center gap-0.5">
                     <Sword className="w-1.5 h-1.5" /> {card.damage}
                   </span>
-                ) : card.shield ? (
-                  <span className="text-[7.5px] font-bold text-sky-400 flex items-center gap-0.5">
-                    <ShieldIcon className="w-1.5 h-1.5" /> +{card.shield}
-                  </span>
                 ) : card.healAmount ? (
-                  <span className="text-[7.5px] font-bold text-emerald-400 flex items-center gap-0.5">
+                  <span className="text-emerald-400 font-bold flex items-center gap-0.5">
                     <HeartPulse className="w-1.5 h-1.5" /> +{card.healAmount}
                   </span>
                 ) : (
@@ -177,20 +161,18 @@ export const PlayedCardsDisplay: React.FC<PlayedCardsDisplayProps> = ({
             <div className="h-full flex flex-col items-center justify-center text-center p-1 gap-1">
               <span className="text-slate-500 text-xs">🃏</span>
               <span className="text-[7.5px] font-mono text-slate-400 leading-tight">
-                {isCurrent ? 'Awaiting Action...' : 'No Action Yet'}
+                No Action Yet
               </span>
             </div>
           )}
         </div>
 
         {/* Text Box Underneath: Displaying Who Played Which Card */}
-        <div className={`w-24 sm:w-28 bg-slate-950/95 border ${
-          isCurrent ? 'border-yellow-500/60 shadow-[0_0_10px_rgba(250,204,21,0.2)]' : 'border-red-500/60 shadow-[0_0_10px_rgba(239,68,68,0.2)]'
-        } rounded-none px-1.5 py-1 text-center flex flex-col items-center justify-center gap-0.5 min-h-[36px]`}>
+        <div className="w-24 sm:w-28 bg-slate-950/95 border border-red-500/60 shadow-[0_0_10px_rgba(239,68,68,0.2)] rounded-none px-1.5 py-1 text-center flex flex-col items-center justify-center gap-0.5 min-h-[36px]">
           {player ? (
             <>
               <div className="flex items-center justify-center gap-1 max-w-full overflow-hidden">
-                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isCurrent ? 'bg-yellow-400 animate-ping' : 'bg-red-400'}`} />
+                <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-red-400" />
                 <span className="text-[8.5px] font-extrabold text-slate-100 truncate tracking-tight">
                   {player.name}
                 </span>
@@ -201,21 +183,11 @@ export const PlayedCardsDisplay: React.FC<PlayedCardsDisplayProps> = ({
             </>
           ) : (
             <span className="text-[7.5px] font-mono text-slate-500 italic">
-              {isCurrent ? 'Waiting for turn...' : 'No card played'}
+              No card played
             </span>
           )}
         </div>
       </div>
-    );
-  };
-
-  return (
-    <div className="flex items-center gap-2 sm:gap-3 bg-slate-950/80 border border-slate-800 p-2 rounded-none backdrop-blur-md shadow-2xl">
-      {/* Left Slot: Previous Card (Red) */}
-      {renderSingleCardSlot(previousPlayedCard, 'previous')}
-
-      {/* Right Slot: Current Card (Yellow) */}
-      {renderSingleCardSlot(currentPlayedCard, 'current')}
     </div>
   );
 };

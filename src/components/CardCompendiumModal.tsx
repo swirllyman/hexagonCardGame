@@ -203,8 +203,8 @@ export const CardCompendiumModal: React.FC<CardCompendiumModalProps> = ({ isOpen
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-3 md:p-6 overflow-hidden">
-      <div className="w-full max-w-6xl h-[90vh] fantasy-sharp-panel gold-corners-bottom border border-amber-500/50 rounded-none shadow-2xl flex flex-col overflow-hidden bg-slate-950/95 text-slate-200">
+    <div className="fixed inset-x-0 bottom-0 top-[60px] bg-slate-950/85 backdrop-blur-md z-[150] flex flex-col items-center justify-start p-3 md:p-4 overflow-hidden">
+      <div className="w-full max-w-6xl h-full fantasy-sharp-panel gold-corners-bottom border border-amber-500/50 rounded-none shadow-2xl flex flex-col overflow-hidden bg-slate-950/95 text-slate-200">
         
         {/* Header Bar */}
         <div className="p-4 md:p-6 border-b border-amber-500/30 flex items-center justify-between gap-4 bg-slate-900/80 flex-shrink-0">

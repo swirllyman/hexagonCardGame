@@ -15,6 +15,7 @@ import type {
   EmoteType,
   BloodBurst,
   PlayedCardRecord,
+  CardAnimStage,
 } from '../types/game';
 import { 
   generateHexGrid, 
@@ -30,6 +31,7 @@ import {
   hexNeighbors,
 } from '../utils/hexGrid';
 import { createStandardPlayerDeck, shuffleDeck, DEFAULT_MOVE_CARDS } from '../utils/cardsData';
+import { getAbilityVFXConfig } from '../utils/vfxData';
 import { programAiTurn } from '../utils/aiEngine';
 import { sound } from '../utils/sound';
 import { multiplayerService } from '../services/multiplayerService';
@@ -41,6 +43,7 @@ export interface SetupPlayerOption {
   aiDifficulty: 'easy' | 'medium' | 'hard';
   avatarUrl?: string;
   teamId?: number;
+  peerId?: string;
 }
 
 const FACTION_MAPPING = {
@@ -78,6 +81,8 @@ export function useGameState() {
   const [resolvingTurnOrder, setResolvingTurnOrder] = useState<number>(0);
   const [previousPlayedCard, setPreviousPlayedCard] = useState<PlayedCardRecord | null>(null);
   const [players, setPlayers] = useState<PlayerState[]>([]);
+  const [cardAnimStage, setCardAnimStage] = useState<CardAnimStage>('idle');
+  const [animatingRecord, setAnimatingRecord] = useState<PlayedCardRecord | null>(null);
 
   // Compute upcoming card about to be played in the current turn step
   const currentPlayedCard = useMemo<PlayedCardRecord | null>(() => {
@@ -138,12 +143,12 @@ export function useGameState() {
     setBloodBursts(prev => [...prev, newBurst]);
   }, []);
 
-  // Cleanup floaters after 2.5s
+  // Cleanup floaters after 5s
   useEffect(() => {
     if (floaters.length === 0) return;
     const timer = setTimeout(() => {
       const now = Date.now();
-      setFloaters(prev => prev.filter(f => now - f.createdAt < 2500));
+      setFloaters(prev => prev.filter(f => now - f.createdAt < 5000));
     }, 600);
     return () => clearTimeout(timer);
   }, [floaters]);
@@ -218,6 +223,7 @@ export function useGameState() {
         faction: FACTION_MAPPING[opt.id],
         teamId: opt.teamId ?? defaultTeamMapping[opt.id],
         avatarUrl: opt.avatarUrl || DEFAULT_AVATARS[opt.id],
+        peerId: opt.peerId,
         hp: 100,
         maxHp: 100,
         shield: 0,
@@ -250,6 +256,8 @@ export function useGameState() {
     setPreviousPlayedCard(null);
     setWinner(null);
     setSelectedHandCard(null);
+    setCurrentAnimation(null);
+    setFloaters([]);
     setBattleLog([]);
     setUsedEmoteThisRound({});
     setActiveEmotes([]);
@@ -414,9 +422,9 @@ export function useGameState() {
     [usedEmoteThisRound, addLog]
   );
 
-  // Network Sync Listener
+  // Network Sync Listener & Peer Disconnect Bot Takeover
   useEffect(() => {
-    const unsubscribe = multiplayerService.onMessage((msg: NetworkMessage) => {
+    const unsubscribeMessage = multiplayerService.onMessage((msg: NetworkMessage) => {
       if (msg.type === 'START_GAME' && msg.payload) {
         const { players: remotePlayers, hexGrid: remoteHexGrid, actionsPerRound: remoteActions } = msg.payload;
         if (remotePlayers && remoteHexGrid) {
@@ -454,25 +462,27 @@ export function useGameState() {
             return p;
           });
 
-          // Check if everyone is now locked
-          const activePlayers = updated.filter(p => !p.isEliminated);
-          const allHumansLocked = activePlayers.filter(p => !p.isAi).every(p => p.isLocked);
+          // Check if everyone is now locked (Host authoritative resolution trigger)
+          if (multiplayerService.isHost) {
+            const activePlayers = updated.filter(p => !p.isEliminated);
+            const allHumansLocked = activePlayers.filter(p => !p.isAi).every(p => p.isLocked);
 
-          if (allHumansLocked && gamePhase === 'planning') {
-            updated = updated.map(p => {
-              if (p.isEliminated) return p;
-              if (p.isAi) {
-                const aiQueue = programAiTurn(p, updated, hexGrid);
-                return { ...p, programmedQueue: aiQueue, isLocked: true };
-              }
-              return p;
-            });
+            if (allHumansLocked && gamePhase === 'planning') {
+              updated = updated.map(p => {
+                if (p.isEliminated) return p;
+                if (p.isAi) {
+                  const aiQueue = programAiTurn(p, updated, hexGrid);
+                  return { ...p, programmedQueue: aiQueue, isLocked: true };
+                }
+                return p;
+              });
 
-            setCurrentSlotIndex(0);
-            setResolvingTurnOrder(0);
-            setGamePhase('resolving');
-            setIsAutoPlay(true);
-            addLog(`All Commanders have locked in queues! Phase: Resolution`, 'system');
+              setCurrentSlotIndex(0);
+              setResolvingTurnOrder(0);
+              setGamePhase('resolving');
+              setIsAutoPlay(true);
+              addLog(`All Commanders have locked in queues! Phase: Resolution`, 'system');
+            }
           }
           return updated;
         });
@@ -487,6 +497,9 @@ export function useGameState() {
           battleLog: rLog,
           round: rRound,
           winner: rWinner,
+          priorityPlayerIdx: rPriority,
+          previousPlayedCard: rPrevCard,
+          roundStartStates: rStartStates,
         } = msg.payload;
 
         if (rPlayers) setPlayers(rPlayers);
@@ -498,6 +511,9 @@ export function useGameState() {
         if (rLog) setBattleLog(rLog);
         if (rRound !== undefined) setRound(rRound);
         if (rWinner !== undefined) setWinner(rWinner);
+        if (rPriority !== undefined) setPriorityPlayerIdx(rPriority);
+        if (rPrevCard !== undefined) setPreviousPlayedCard(rPrevCard);
+        if (rStartStates) setRoundStartStates(rStartStates);
       } else if (msg.type === 'EMOTE' && msg.payload) {
         const { senderId, senderName, emote, text } = msg.payload;
         if (senderId && senderName && emote && text) {
@@ -506,13 +522,70 @@ export function useGameState() {
       }
     });
 
-    return () => unsubscribe();
+    // Handle peer disconnection on Host during a match (Bot takeover)
+    const unsubscribeDisconnect = multiplayerService.onPeerDisconnect((peerId) => {
+      if (!multiplayerService.isHost) return;
+
+      setPlayers((prev) => {
+        const targetPlayer = prev.find((p) => p.peerId === peerId);
+        if (!targetPlayer) return prev;
+
+        const newName = targetPlayer.name.startsWith('Bot')
+          ? targetPlayer.name
+          : `Bot ${targetPlayer.name.replace(/^Commander\s+/, '')}`;
+
+        let updated = prev.map((p) => {
+          if (p.peerId === peerId) {
+            return {
+              ...p,
+              isAi: true,
+              peerId: undefined,
+              name: newName,
+            };
+          }
+          return p;
+        });
+
+        addLog(`⚡ Player ${targetPlayer.name} disconnected! Bot (${newName}) has taken over!`, 'system');
+
+        // If in planning phase, check if all remaining human players are now locked
+        if (gamePhase === 'planning') {
+          const activePlayers = updated.filter((p) => !p.isEliminated);
+          const aliveHumans = activePlayers.filter((p) => !p.isAi);
+          const allHumansLocked = aliveHumans.length === 0 || aliveHumans.every((p) => p.isLocked);
+
+          if (allHumansLocked) {
+            updated = updated.map((p) => {
+              if (p.isEliminated) return p;
+              if (p.isAi) {
+                const aiQueue = programAiTurn(p, updated, hexGrid);
+                return { ...p, programmedQueue: aiQueue, isLocked: true };
+              }
+              return p;
+            });
+
+            setCurrentSlotIndex(0);
+            setResolvingTurnOrder(0);
+            setGamePhase('resolving');
+            setIsAutoPlay(true);
+            addLog(`All remaining Commanders locked! Commencing resolution!`, 'system');
+          }
+        }
+
+        return updated;
+      });
+    });
+
+    return () => {
+      unsubscribeMessage();
+      unsubscribeDisconnect();
+    };
   }, [hexGrid, gamePhase, addLog, handleEmoteAction]);
 
 
   // Execute single resolution step for current active player in current slot
   const executeNextStep = useCallback(() => {
-    if (gamePhase !== 'resolving') return;
+    if (gamePhase !== 'resolving' || cardAnimStage !== 'idle') return;
 
     const activePlayers = players.filter(p => !p.isEliminated);
     if (activePlayers.length <= 1) return;
@@ -526,18 +599,302 @@ export function useGameState() {
     const actingPlayerIdx = order[resolvingTurnOrder];
     const actor = players[actingPlayerIdx];
 
-    let updatedPlayers = [...players];
+    // Helper to finish step state, victory check, KOTH strike, slot advance, & round end
+    const finishStepRotation = (latestPlayers: PlayerState[]) => {
+      setPlayers(latestPlayers);
 
-    if (!actor.isEliminated) {
-      const actionCard = actor.programmedQueue[currentSlotIndex] || null;
+      // Check remaining alive players & teams
+      const remainingAlive = latestPlayers.filter(p => !p.isEliminated);
+      const aliveTeams = Array.from(new Set(remainingAlive.map(p => p.teamId)));
+      if (aliveTeams.length <= 1) {
+        const winningTeamId = aliveTeams[0];
+        const champ = remainingAlive[0] || null;
+        setWinner(champ);
+        setGamePhase('ended');
+        setCardAnimStage('idle');
+        setAnimatingRecord(null);
+        if (champ) {
+          sound.playVictory();
+          addLog(`🏆 TEAM VICTORY! Team ${winningTeamId} has defeated all rivals and won the match!`, 'system', champ.id);
+        }
+        return;
+      }
 
-      // Save executed card into previousPlayedCard (Red Box)
-      setPreviousPlayedCard({
-        player: actor,
-        card: actionCard,
-        slotIndex: currentSlotIndex,
-        stepNumber: resolvingTurnOrder + 1,
-      });
+      // Step turn rotation
+      const nextTurnOrder = resolvingTurnOrder + 1;
+      if (nextTurnOrder >= players.length) {
+        // Current slot complete! Process King of the Hill (0,0) capture & global strike
+        let currentPlayers = latestPlayers;
+        const hillTileIdx = hexGrid.findIndex(t => t.terrain === 'hill' || (t.coord.q === 0 && t.coord.r === 0));
+        if (hillTileIdx !== -1) {
+          const hillTile = hexGrid[hillTileIdx];
+          const hillCoord = hillTile.coord;
+
+          const hillOccupant = currentPlayers.find(p => !p.isEliminated && hexEquals(p.coord, hillCoord));
+          let currentController = hillTile.hillController || null;
+          let currentProgress = hillTile.hillProgress || null;
+
+          if (currentController) {
+            const controllerPlayer = currentPlayers.find(p => p.id === currentController);
+            if (!controllerPlayer || controllerPlayer.isEliminated) {
+              currentController = null;
+              currentProgress = null;
+              addLog(`🏰 Central Hill control reset (Commander eliminated).`, 'hill');
+            }
+          }
+
+          let newController = currentController;
+          let newProgress = currentProgress;
+          let triggerStrikeFor: PlayerState | null = null;
+
+          if (hillOccupant) {
+            if (currentController === hillOccupant.id) {
+              newProgress = { playerId: hillOccupant.id, turnsCount: 2 };
+              triggerStrikeFor = hillOccupant;
+            } else {
+              const prevTurns = (currentProgress && currentProgress.playerId === hillOccupant.id) ? currentProgress.turnsCount : 0;
+              const newTurns = prevTurns + 1;
+
+              if (newTurns >= 2) {
+                const prevOwnerName = currentController ? currentPlayers.find(p => p.id === currentController)?.name : null;
+                newController = hillOccupant.id;
+                newProgress = { playerId: hillOccupant.id, turnsCount: 2 };
+                addFloater(hillCoord, '👑 HILL CAPTURED!', 'hill');
+                sound.playVictory();
+
+                if (prevOwnerName) {
+                  addLog(`👑 KING OF THE HILL! ${hillOccupant.name} HAS SEIZED THE CENTRAL HILL FROM ${prevOwnerName}!`, 'hill', hillOccupant.id);
+                } else {
+                  addLog(`👑 KING OF THE HILL! ${hillOccupant.name} HAS CAPTURED THE CENTRAL HILL!`, 'hill', hillOccupant.id);
+                }
+
+                triggerStrikeFor = hillOccupant;
+              } else {
+                newProgress = { playerId: hillOccupant.id, turnsCount: 1 };
+                addFloater(hillCoord, 'CONTESTING 1/2', 'hill');
+                sound.playCardSelect();
+                addLog(`🏰 ${hillOccupant.name} is standing in the Central Hill! (1/2 turns to capture)`, 'hill', hillOccupant.id);
+
+                if (currentController) {
+                  const ownerPlayer = currentPlayers.find(p => p.id === currentController && !p.isEliminated);
+                  if (ownerPlayer) {
+                    triggerStrikeFor = ownerPlayer;
+                  }
+                }
+              }
+            }
+          } else {
+            if (currentProgress && currentProgress.turnsCount < 2) {
+              newProgress = null;
+            }
+
+            if (currentController) {
+              const ownerPlayer = currentPlayers.find(p => p.id === currentController && !p.isEliminated);
+              if (ownerPlayer) {
+                triggerStrikeFor = ownerPlayer;
+              }
+            }
+          }
+
+          if (triggerStrikeFor) {
+            const owner = triggerStrikeFor;
+            const damageAmt = 15;
+            const enemies = currentPlayers.filter(p => !p.isEliminated && p.teamId !== owner.teamId);
+
+            if (enemies.length > 0) {
+              enemies.forEach(enemy => {
+                addFloater(enemy.coord, `👑 HILL STRIKE -${damageAmt}`, 'hill');
+              });
+
+              const playerHpMap: Record<string, { before: number; after: number }> = {};
+
+              currentPlayers = currentPlayers.map(p => {
+                if (!p.isEliminated && p.teamId !== owner.teamId) {
+                  const netDmg = Math.max(0, damageAmt - p.shield);
+                  const newShield = Math.max(0, p.shield - damageAmt);
+                  const newHp = Math.max(0, p.hp - netDmg);
+                  playerHpMap[p.id] = { before: p.hp, after: newHp };
+                  const isDead = newHp === 0;
+                  if (isDead) {
+                    addLog(`💀 ${p.name} WAS ELIMINATED by the Central Hill strike!`, 'elimination', p.id);
+                  }
+                  return { ...p, hp: newHp, shield: newShield, isEliminated: isDead };
+                }
+                if (p.id === owner.id) {
+                  const totalNetDmg = enemies.reduce((sum, e) => sum + Math.max(0, damageAmt - e.shield), 0);
+                  return { ...p, damageDealt: p.damageDealt + totalNetDmg };
+                }
+                return p;
+              });
+
+              enemies.forEach(oldEnemy => {
+                const nowDead = currentPlayers.find(p => p.id === oldEnemy.id && p.isEliminated);
+                if (nowDead) {
+                  triggerHeroDeath(nowDead.coord);
+                }
+              });
+
+              sound.playFireball();
+              const hpChangesList = Object.values(playerHpMap);
+              const firstHpChange = hpChangesList.length === 1 ? hpChangesList[0] : undefined;
+              addLog(`👑 KING OF THE HILL! ${owner.name}'s Central Hill struck enemy teams for ${damageAmt} damage!`, 'hill', owner.id, firstHpChange);
+
+              const aliveAfterHill = currentPlayers.filter(p => !p.isEliminated);
+              const aliveTeamsAfterHill = Array.from(new Set(aliveAfterHill.map(p => p.teamId)));
+              if (aliveTeamsAfterHill.length <= 1) {
+                const winningTeamId = aliveTeamsAfterHill[0];
+                const champ = aliveAfterHill[0] || null;
+                setWinner(champ);
+                setGamePhase('ended');
+                if (champ) {
+                  sound.playVictory();
+                  addLog(`🏆 TEAM VICTORY! Team ${winningTeamId} has defeated all rivals and won the match!`, 'system', champ.id);
+                }
+                setPlayers(currentPlayers);
+                return;
+              }
+            }
+          }
+
+          setHexGrid(prevGrid => prevGrid.map((t, idx) => 
+            idx === hillTileIdx ? { ...t, hillController: newController, hillProgress: newProgress } : t
+          ));
+        }
+
+        const nextSlot = currentSlotIndex + 1;
+        if (nextSlot >= actionsPerRound) {
+          setRound(r => r + 1);
+          setUsedEmoteThisRound({});
+          setPriorityPlayerIdx(p => getNextAlivePlayerIdx(currentPlayers, p + 1));
+          setCurrentSlotIndex(0);
+          setResolvingTurnOrder(0);
+          setGamePhase('planning');
+          setIsAutoPlay(false);
+
+          setHexGrid(prevGrid => prevGrid.map(t => {
+            if (t.terrain === 'rune' && t.runeCooldown && t.runeCooldown > 0) {
+              const nextCd = t.runeCooldown - 1;
+              if (nextCd === 0) {
+                const runeName = t.runeEffect === 'attackBoost' ? 'Empower' : t.runeEffect === 'shield' ? 'Shield' : 'Vitality';
+                addLog(`✨ A ${runeName} Rune pickup has respawned!`, 'rune');
+              }
+              return { ...t, runeCooldown: nextCd };
+            }
+            return t;
+          }));
+
+          currentPlayers = currentPlayers.map(p => {
+            if (p.isEliminated) return p;
+
+            let currentHp = p.hp;
+            let currentShield = 0;
+            const remainingBuffs: PlayerState['buffs'] = [];
+
+            (p.buffs || []).forEach(buff => {
+              if (buff.type === 'healRegen') {
+                const nextHp = Math.min(p.maxHp, currentHp + buff.value);
+                addLog(`💚 ${p.name} regenerated ${buff.value} HP from Vitality buff!`, 'rune', p.id, { before: currentHp, after: nextHp });
+                currentHp = nextHp;
+              } else if (buff.type === 'shield') {
+                currentShield = currentShield + buff.value;
+                addLog(`🛡️ ${p.name} gained ${buff.value} Shield from Fortified buff!`, 'rune', p.id);
+              }
+
+              if (buff.duration > 1) {
+                remainingBuffs.push({ ...buff, duration: buff.duration - 1 });
+              } else {
+                addLog(`⌛ ${p.name}'s ${buff.name} buff expired.`, 'system', p.id);
+              }
+            });
+
+            const playedCardIds = p.programmedQueue.filter((c): c is Card => c !== null).map(c => c.id);
+            let newHand = p.hand.filter(c => !playedCardIds.includes(c.id));
+            let drawPile = [...p.drawPile];
+            let discardPile = [...p.discardPile, ...p.hand.filter(c => playedCardIds.includes(c.id))];
+
+            while (newHand.length < 5) {
+              if (drawPile.length === 0) {
+                drawPile = shuffleDeck(discardPile);
+                discardPile = [];
+              }
+              if (drawPile.length === 0) break;
+              newHand.push(drawPile.shift()!);
+            }
+
+            return {
+              ...p,
+              hp: currentHp,
+              hand: newHand,
+              drawPile,
+              discardPile,
+              shield: currentShield,
+              buffs: remainingBuffs,
+              roundStartCoord: p.coord,
+              roundStartFacing: p.facing,
+              programmedQueue: Array(actionsPerRound).fill(null),
+              isLocked: false,
+            };
+          });
+
+          const nextRoundStates = currentPlayers.reduce((acc, p) => {
+            acc[p.id] = { coord: p.coord, facing: p.facing };
+            return acc;
+          }, {} as Record<PlayerId, { coord: AxialCoord; facing: number }>);
+          setRoundStartStates(nextRoundStates);
+
+          const aliveHumans = currentPlayers.filter(p => !p.isEliminated && !p.isAi);
+          if (aliveHumans.length === 0) {
+            const autoLockedAis = currentPlayers.map(p => {
+              if (p.isEliminated) return p;
+              if (p.isAi) {
+                const aiQueue = programAiTurn(p, currentPlayers, hexGrid);
+                return { ...p, programmedQueue: aiQueue, isLocked: true };
+              }
+              return p;
+            });
+            currentPlayers = autoLockedAis;
+            setCurrentSlotIndex(0);
+            setResolvingTurnOrder(0);
+            setGamePhase('resolving');
+            setIsAutoPlay(true);
+            addLog(`Round ${round + 1} Auto-planning for surviving Commanders. Commencing execution!`, 'system');
+          }
+          setPlayers(currentPlayers);
+        } else {
+          setCurrentSlotIndex(nextSlot);
+          setResolvingTurnOrder(0);
+          setPlayers(currentPlayers);
+        }
+      } else {
+        setResolvingTurnOrder(nextTurnOrder);
+      }
+    };
+
+    if (!actor || actor.isEliminated) {
+      finishStepRotation(players);
+      return;
+    }
+
+    const actionCard = actor.programmedQueue[currentSlotIndex] || null;
+    const stepRecord: PlayedCardRecord = {
+      player: actor,
+      card: actionCard,
+      slotIndex: currentSlotIndex,
+      stepNumber: resolvingTurnOrder + 1,
+    };
+
+    const speedMult = playSpeed === 1 ? 1.0 : playSpeed === 2 ? 0.55 : 0.35;
+    const animDurationMs = Math.floor(1150 * speedMult);
+    const actionReactionMs = Math.floor(180 * speedMult);
+
+    // Single unified card animation: Pop out from player UI slot on left -> hold 1s during action -> glide to Red box LAST TURN
+    setAnimatingRecord(stepRecord);
+    setCardAnimStage('playing_turn');
+    sound.playCardSelect();
+
+    setTimeout(() => {
+      let updatedPlayers = [...players];
+      setCurrentAnimation(null);
 
       if (actionCard) {
         // Execute card effect
@@ -790,12 +1147,17 @@ export function useGameState() {
             }
           }
 
+          const moveVfx = getAbilityVFXConfig(actionCard);
           setCurrentAnimation({
             actorId: actor.id,
             fromCoord: actor.coord,
             toCoord: targetCoord,
             actionName: actionCard.name,
+            cardType: actionCard.type,
             effectType: 'move',
+            vfxConfig: moveVfx,
+            startTime: Date.now(),
+            totalDurationMs: moveVfx.travelTimeMs || 350,
           });
         } 
         else if (actionCard.category === 'attack' || actionCard.damage !== undefined) {
@@ -989,21 +1351,33 @@ export function useGameState() {
             else if (actionCard.type === 'heavy' || actionCard.type === 'seismic_slam') sound.playHeavyHit();
             else sound.playSlash();
 
+            const atkVfx = getAbilityVFXConfig(actionCard);
             setCurrentAnimation({
               actorId: actor.id,
+              fromCoord: actor.coord,
               targetCoords: targetHexes,
               actionName: actionCard.name,
+              cardType: actionCard.type,
               effectType: 'attack',
               damageDealt: dmg,
+              vfxConfig: atkVfx,
+              startTime: Date.now(),
+              totalDurationMs: (atkVfx.windupTimeMs || 100) + (atkVfx.travelTimeMs || 350) + (atkVfx.impactTimeMs || 250),
             });
           } else if (dmg > 0) {
             addLog(`${actor.name} used ${actionCard.name} towards facing, but no enemies were in range!`, 'attack', actor.id);
             addFloater(actor.coord, 'MISS!', 'miss');
+            const missVfx = getAbilityVFXConfig(actionCard);
             setCurrentAnimation({
               actorId: actor.id,
+              fromCoord: actor.coord,
               targetCoords: targetHexes,
               actionName: actionCard.name,
+              cardType: actionCard.type,
               effectType: 'miss',
+              vfxConfig: missVfx,
+              startTime: Date.now(),
+              totalDurationMs: missVfx.travelTimeMs || 350,
             });
           }
         }
@@ -1041,6 +1415,17 @@ export function useGameState() {
             });
             addFloater(actor.coord, `BUFF +${bVal}`, 'rune');
           }
+          const defVfx = getAbilityVFXConfig(actionCard);
+          setCurrentAnimation({
+            actorId: actor.id,
+            fromCoord: actor.coord,
+            actionName: actionCard.name,
+            cardType: actionCard.type,
+            effectType: 'shield',
+            vfxConfig: defVfx,
+            startTime: Date.now(),
+            totalDurationMs: defVfx.travelTimeMs || 300,
+          });
           addLog(`${actor.name} activated ${actionCard.name}.`, 'defense', actor.id);
           sound.playShield();
         }
@@ -1108,11 +1493,22 @@ export function useGameState() {
             addLog(`✨ ${actor.name} activated ${actionCard.name} buff! (${bType} +${bVal} for ${bDur} rounds)`, 'rune', actor.id);
             addFloater(actor.coord, `BUFF +${bVal}`, 'rune');
           }
+
+          const utilVfx = getAbilityVFXConfig(actionCard);
+          setCurrentAnimation({
+            actorId: actor.id,
+            fromCoord: actor.coord,
+            actionName: actionCard.name,
+            cardType: actionCard.type,
+            effectType: 'heal',
+            vfxConfig: utilVfx,
+            startTime: Date.now(),
+            totalDurationMs: utilVfx.travelTimeMs || 300,
+          });
         }
       } else {
         addLog(`${actor.name} passed (empty slot - passive round).`, 'system', actor.id);
       }
-    }
 
     // Check for newly eliminated heroes and trigger blood particle spray & bloody hex tile
     let priorityNeedsUpdate = false;
@@ -1138,6 +1534,8 @@ export function useGameState() {
       const champ = remainingAlive[0] || null;
       setWinner(champ);
       setGamePhase('ended');
+      setCardAnimStage('idle');
+      setAnimatingRecord(null);
       if (champ) {
         sound.playVictory();
         addLog(`🏆 TEAM VICTORY! Team ${winningTeamId} has defeated all rivals and won the match!`, 'system', champ.id);
@@ -1383,9 +1781,7 @@ export function useGameState() {
         }, {} as Record<PlayerId, { coord: AxialCoord; facing: number }>);
         setRoundStartStates(nextRoundStates);
 
-        addLog(`--- Round ${round + 1} Planning Phase ---`, 'system');
-
-        // If all remaining alive players are AI bots (human player eliminated), automatically auto-play bot turns!
+        // If all remaining alive players are AI bots, auto-plan bot turns!
         const aliveHumans = updatedPlayers.filter(p => !p.isEliminated && !p.isAi);
         if (aliveHumans.length === 0) {
           const autoLockedAis = updatedPlayers.map(p => {
@@ -1411,26 +1807,47 @@ export function useGameState() {
       setResolvingTurnOrder(nextTurnOrder);
     }
 
-    setPlayers(updatedPlayers);
-  }, [gamePhase, resolvingTurnOrder, currentSlotIndex, priorityPlayerIdx, round, hexGrid, addLog, players, actionsPerRound]);
+      setTimeout(() => {
+        setPreviousPlayedCard(stepRecord);
+        setCardAnimStage('idle');
+        setAnimatingRecord(null);
+        finishStepRotation(updatedPlayers);
+      }, Math.max(300, animDurationMs - actionReactionMs));
+
+    }, actionReactionMs);
+
+  }, [gamePhase, cardAnimStage, players, priorityPlayerIdx, resolvingTurnOrder, currentSlotIndex, playSpeed, round, hexGrid, addLog, actionsPerRound, triggerHeroDeath, addFloater]);
+
+  const executeNextStepRef = useRef(executeNextStep);
+  useEffect(() => {
+    executeNextStepRef.current = executeNextStep;
+  });
 
   // Handle Auto-Play timer for resolution playback
   useEffect(() => {
     const isClient = !!multiplayerService.roomCode && !multiplayerService.isHost;
-    if (gamePhase === 'resolving' && isAutoPlay && !isClient) {
-      const intervalMs = playSpeed === 1 ? 1200 : playSpeed === 2 ? 650 : 320;
+    if (gamePhase === 'resolving' && isAutoPlay && !isClient && cardAnimStage === 'idle') {
+      const speedMult = playSpeed === 1 ? 1.0 : playSpeed === 2 ? 0.55 : 0.35;
+      const order = [];
+      for (let i = 0; i < players.length; i++) {
+        order.push((priorityPlayerIdx + i) % players.length);
+      }
+      const actingPlayer = players[order[resolvingTurnOrder]];
+      const isEliminatedStep = !actingPlayer || actingPlayer.isEliminated;
+      const delayMs = isEliminatedStep ? 50 : Math.floor(250 * speedMult);
+
       autoPlayTimerRef.current = setTimeout(() => {
-        executeNextStep();
-      }, intervalMs);
+        executeNextStepRef.current();
+      }, delayMs);
     }
     return () => {
       if (autoPlayTimerRef.current) clearTimeout(autoPlayTimerRef.current);
     };
-  }, [gamePhase, isAutoPlay, playSpeed, resolvingTurnOrder, currentSlotIndex, executeNextStep]);
+  }, [gamePhase, isAutoPlay, cardAnimStage, playSpeed, resolvingTurnOrder, currentSlotIndex, players, priorityPlayerIdx]);
 
   // Host state synchronization broadcast
   useEffect(() => {
-    if (multiplayerService.isHost && (gamePhase === 'resolving' || gamePhase === 'ended' || gamePhase === 'gameover')) {
+    if (multiplayerService.isHost) {
       multiplayerService.sendMessage({
         type: 'SYNC_GAME_STATE',
         senderPeerId: multiplayerService.peerId || '',
@@ -1444,10 +1861,13 @@ export function useGameState() {
           battleLog,
           round,
           winner,
+          priorityPlayerIdx,
+          previousPlayedCard,
+          roundStartStates,
         }
       });
     }
-  }, [players, hexGrid, currentSlotIndex, resolvingTurnOrder, gamePhase, currentAnimation, battleLog, round, winner]);
+  }, [players, hexGrid, currentSlotIndex, resolvingTurnOrder, gamePhase, currentAnimation, battleLog, round, winner, priorityPlayerIdx, previousPlayedCard, roundStartStates]);
 
   // Calculate 3-slot Projected Intent Trajectories
   const projectedIntents = useMemo(() => {
@@ -1507,6 +1927,10 @@ export function useGameState() {
     return intents;
   }, [players, hexGrid, roundStartStates, gamePhase, localPlayerId]);
 
+  const clearAnimation = useCallback(() => {
+    setCurrentAnimation(null);
+  }, []);
+
   return {
     gamePhase,
     round,
@@ -1543,5 +1967,8 @@ export function useGameState() {
     setIsAutoPlay,
     setPlaySpeed,
     setGamePhase,
+    clearAnimation,
+    cardAnimStage,
+    animatingRecord,
   };
 }
