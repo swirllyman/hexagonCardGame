@@ -27,7 +27,7 @@ export function hexDistance(a: AxialCoord, b: AxialCoord): number {
   return (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(sa - sb)) / 2;
 }
 
-export function isValidGridCoord(coord: AxialCoord, mapRadius: number = 4): boolean {
+export function isValidGridCoord(coord: AxialCoord, mapRadius: number = 3): boolean {
   return hexDistance({ q: 0, r: 0 }, coord) <= mapRadius;
 }
 
@@ -126,6 +126,17 @@ export function getRelativeHex(
       const newF = normalizeFacing(normFacing + 3);
       return { targetCoord: coord, newFacing: newF };
     }
+    case 'phase_step': {
+      const stepDist = Math.max(1, distance);
+      const delta = hexScale(HEX_DIRECTIONS[normFacing], stepDist);
+      return { targetCoord: hexAdd(coord, delta), newFacing: normFacing };
+    }
+    case 'roll_flip': {
+      const stepDist = Math.max(1, distance);
+      const delta = hexScale(HEX_DIRECTIONS[normFacing], stepDist);
+      const newF = normalizeFacing(normFacing + 3);
+      return { targetCoord: hexAdd(coord, delta), newFacing: newF };
+    }
     default: {
       const delta = hexScale(HEX_DIRECTIONS[normFacing], distance);
       return { targetCoord: hexAdd(coord, delta), newFacing: normFacing };
@@ -176,15 +187,15 @@ export function getFrontalTargetHexes(
 // Convert Axial hex coordinate to Screen Pixel (x, y) for Pointy-topped hexes
 export function hexToPixel(coord: AxialCoord, radius: number, center: { x: number; y: number }): { x: number; y: number } {
   const x = radius * (Math.sqrt(3) * coord.q + (Math.sqrt(3) / 2) * coord.r);
-  const y = radius * ((3 / 2) * coord.r);
+  const y = radius * ((3 / 2) * coord.r) * 0.72;
   return {
     x: center.x + x,
     y: center.y + y,
   };
 }
 
-// Generate Symmetrical Hex Grid around center (0,0) of radius N
-export function generateHexGrid(mapRadius: number = 4): HexTile[] {
+// Generate Symmetrical Hex Grid around center (0,0) of radius N (default 3)
+export function generateHexGrid(mapRadius: number = 3): HexTile[] {
   const tiles: HexTile[] = [];
 
   for (let q = -mapRadius; q <= mapRadius; q++) {
@@ -206,12 +217,12 @@ export function generateHexGrid(mapRadius: number = 4): HexTile[] {
         terrain = 'hill';
         hillController = null;
         hillProgress = null;
-      } else if (distFromCenter === 2 && (q === 0 || r === 0 || q + r === 0)) {
+      } else if (distFromCenter === 1 && (q === 0 || r === 0 || q + r === 0)) {
         terrain = 'rune';
-        runeEffect = Math.abs(q) === 2 ? 'heal' : 'shield';
+        runeEffect = q !== 0 && r === 0 ? 'heal' : (q === 0 && r !== 0 ? 'shield' : 'attackBoost');
         runeCooldown = 0;
         maxRuneCooldown = 3;
-      } else if (distFromCenter === 3 && (q === 1 || q === -1) && (r === 2 || r === -2)) {
+      } else if (distFromCenter === 2 && q !== 0 && r !== 0 && q + r !== 0) {
         terrain = 'obstacle';
       }
 
@@ -222,13 +233,14 @@ export function generateHexGrid(mapRadius: number = 4): HexTile[] {
   return tiles;
 }
 
-// 4 Corner Starting Positions for Player 1, 2, 3, 4
-export function getStartingPositions(mapRadius: number = 4): { [key: string]: { coord: AxialCoord; facing: number } } {
+// 4 Corner Starting Positions for Player 1, 2, 3, 4 (Outer edge of radius N grid)
+export function getStartingPositions(mapRadius: number = 3): { [key: string]: { coord: AxialCoord; facing: number } } {
+  const startRadius = mapRadius;
   return {
-    player1: { coord: { q: 0, r: -mapRadius }, facing: 1 },         // Top (North)
-    player2: { coord: { q: mapRadius, r: 0 }, facing: 3 },          // Right (East)
-    player3: { coord: { q: 0, r: mapRadius }, facing: 4 },          // Bottom (South)
-    player4: { coord: { q: -mapRadius, r: 0 }, facing: 0 },         // Left (West)
+    player1: { coord: { q: 0, r: -startRadius }, facing: 1 },         // Top (North)
+    player2: { coord: { q: startRadius, r: 0 }, facing: 3 },          // Right (East)
+    player3: { coord: { q: 0, r: startRadius }, facing: 4 },          // Bottom (South)
+    player4: { coord: { q: -startRadius, r: 0 }, facing: 0 },         // Left (West)
   };
 }
 

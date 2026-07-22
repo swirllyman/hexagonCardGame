@@ -26,7 +26,9 @@ export type CardType =
   | 'sidestep' 
   | 'pivot_left'
   | 'pivot_right'
+  | 'about_face'
   | 'backstep'
+  | 'attack'
   | 'melee' 
   | 'heavy' 
   | 'fireball' 
@@ -39,7 +41,50 @@ export type CardType =
   | 'thunder'
   | 'iron_wall'
   | 'frost_nova'
-  | 'vampiric';
+  | 'vampiric'
+  // 20 Ability Cards
+  | 'scorpion_pull'
+  | 'hook_shot'
+  | 'gravitational_surge'
+  | 'swap_strike'
+  | 'repulsion_blast'
+  | 'chain_lightning'
+  | 'blasphemous_burst'
+  | 'supernova'
+  | 'seismic_slam'
+  | 'blade_storm'
+  | 'parry_dash'
+  | 'reflection_barrier'
+  | 'sanctuary'
+  | 'spectral_shield'
+  | 'bounty_hunter'
+  | 'berserk_fury'
+  | 'overcharge'
+  | 'shadow_cloak'
+  | 'titan_fortitude'
+  | 'blood_pact'
+  // 10 Anti-Bump & Unyielding Abilities
+  | 'anchor_stance'
+  | 'juggernaut_aura'
+  | 'iron_roots'
+  | 'spiked_bulwark'
+  | 'immovable_wall'
+  | 'shockwave_repel'
+  | 'counter_bump'
+  | 'kinetic_absorber'
+  | 'stone_footing'
+  | 'unyielding_bastion'
+  // 10 Advanced Movement Abilities
+  | 'dash_forward'
+  | 'sidestep_evasion'
+  | 'ghost_strafe'
+  | 'backflip_vault'
+  | 'shadow_step'
+  | 'phase_blink'
+  | 'bulwark_charge'
+  | 'tumble_roll'
+  | 'sky_vault'
+  | 'warp_leap';
 
 export type FacingMoveType = 
   | 'forward' 
@@ -49,7 +94,10 @@ export type FacingMoveType =
   | 'backstep' 
   | 'pivot_left' 
   | 'pivot_right' 
-  | 'about_face';
+  | 'about_face'
+  | 'teleport_nearest'
+  | 'phase_step'
+  | 'roll_flip';
 
 export type FacingAttackType = 'frontal' | 'cleave_arc' | 'line' | 'aoe';
 
@@ -63,7 +111,12 @@ export interface Card {
   damage?: number;
   shield?: number;
   pushDist?: number;
+  pullDist?: number;
   healAmount?: number;
+  buffType?: 'attackBoost' | 'shield' | 'healRegen' | 'unyielding';
+  buffDuration?: number;
+  buffValue?: number;
+  isUnyieldingSlot?: boolean; // Instant 1-turn unyielding for current turn slot
   iconName: string;
   spriteUrl?: string;
   facingMoveType?: FacingMoveType;
@@ -85,10 +138,71 @@ export interface ProjectedIntent {
 
 export interface PlayerBuff {
   id: string;
-  type: 'attackBoost' | 'shield' | 'healRegen';
+  type: 'attackBoost' | 'shield' | 'healRegen' | 'unyielding';
   name: string;
   duration: number; // turns remaining
   value: number;
+}
+
+export interface TeamConfig {
+  id: number;
+  name: string;
+  colorHex: string;
+  bgClass: string;
+  borderClass: string;
+  textClass: string;
+  badgeClass: string;
+  ringClass: string;
+}
+
+export const TEAMS: Record<number, TeamConfig> = {
+  1: {
+    id: 1,
+    name: 'Team 1',
+    colorHex: '#ef4444',
+    bgClass: 'bg-rose-950/40',
+    borderClass: 'border-rose-500',
+    textClass: 'text-rose-400',
+    badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/50',
+    ringClass: 'ring-rose-500',
+  },
+  2: {
+    id: 2,
+    name: 'Team 2',
+    colorHex: '#38bdf8',
+    bgClass: 'bg-sky-950/40',
+    borderClass: 'border-sky-500',
+    textClass: 'text-sky-400',
+    badgeClass: 'bg-sky-500/20 text-sky-300 border-sky-500/50',
+    ringClass: 'ring-sky-500',
+  },
+  3: {
+    id: 3,
+    name: 'Team 3',
+    colorHex: '#34d399',
+    bgClass: 'bg-emerald-950/40',
+    borderClass: 'border-emerald-500',
+    textClass: 'text-emerald-400',
+    badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50',
+    ringClass: 'ring-emerald-500',
+  },
+  4: {
+    id: 4,
+    name: 'Team 4',
+    colorHex: '#fbbf24',
+    bgClass: 'bg-amber-950/40',
+    borderClass: 'border-amber-500',
+    textClass: 'text-amber-400',
+    badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/50',
+    ringClass: 'ring-amber-500',
+  },
+};
+
+export interface PlayedCardRecord {
+  player: PlayerState;
+  card: Card | null;
+  slotIndex: number;
+  stepNumber: number;
 }
 
 export interface PlayerState {
@@ -97,6 +211,7 @@ export interface PlayerState {
   isAi: boolean;
   aiDifficulty: 'easy' | 'medium' | 'hard';
   faction: FactionId;
+  teamId: number;
   avatarUrl?: string;
   hp: number;
   maxHp: number;
@@ -126,9 +241,17 @@ export interface HexTile {
   maxRuneCooldown?: number;
   hillController?: PlayerId | null;
   hillProgress?: { playerId: PlayerId; turnsCount: number } | null;
+  isBloody?: boolean;
+  bloodSeed?: number;
 }
 
-export type GamePhase = 'setup' | 'planning' | 'resolving' | 'gameover';
+export interface BloodBurst {
+  id: string;
+  coord: AxialCoord;
+  createdAt: number;
+}
+
+export type GamePhase = 'setup' | 'planning' | 'resolving' | 'ended' | 'gameover';
 
 export interface BattleLogEntry {
   id: string;
@@ -157,6 +280,7 @@ export interface MultiplayerSeat {
   name: string;
   isAi: boolean;
   aiDifficulty: 'easy' | 'medium' | 'hard';
+  teamId: number;
   peerId?: string;
   isReady?: boolean;
   avatarUrl?: string;

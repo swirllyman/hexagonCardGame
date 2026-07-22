@@ -61,6 +61,7 @@ function getFacingBadgeText(card: Card): string | null {
   if (card.facingMoveType === 'sidestep_right' || card.facingMoveType === 'sidestep_left') return '↔️ Strafe';
   if (card.facingMoveType === 'pivot_left') return '↺ Turn L';
   if (card.facingMoveType === 'pivot_right') return '↻ Turn R';
+  if (card.facingMoveType === 'about_face') return '🔄 180°';
   if (card.facingMoveType === 'backstep') return '⬇️ Retreat';
   if (card.facingAttackType === 'frontal') return '🎯 Frontal';
   if (card.facingAttackType === 'line') return '⚡ Line';
@@ -108,11 +109,11 @@ export const CardHand: React.FC<CardHandProps> = ({
     let accordionClass = '';
     if (!isQueued) {
       if (isHovered) {
-        accordionClass = 'mx-1 scale-105';
+        accordionClass = 'mx-0.5 scale-105';
       } else if (isAnyHovered) {
-        accordionClass = index > 0 ? '-ml-6' : '';
+        accordionClass = index > 0 ? (isMoveCard ? '-ml-7 sm:-ml-6' : '-ml-6 sm:-ml-5') : '';
       } else {
-        accordionClass = index > 0 ? '-ml-3' : '';
+        accordionClass = index > 0 ? (isMoveCard ? '-ml-6 sm:-ml-5' : '-ml-4 sm:-ml-3') : '';
       }
     }
 
@@ -122,7 +123,7 @@ export const CardHand: React.FC<CardHandProps> = ({
         onClick={() => handleCardClick(card, isQueued)}
         onMouseEnter={() => setHoveredCardId(card.id)}
         onMouseLeave={() => setHoveredCardId(null)}
-        className={`relative w-24 h-32 rounded-xl border-2 ${categoryStyle.bg} ${categoryStyle.border} p-1.5 flex flex-col justify-between cursor-pointer transform transition-all duration-200 select-none shadow-lg ${
+        className={`relative w-22 sm:w-24 h-32 rounded-none border-2 ${categoryStyle.bg} ${categoryStyle.border} p-1.5 flex flex-col justify-between cursor-pointer transform transition-all duration-200 select-none shadow-lg ${
           accordionClass
         } ${
           isHovered ? 'z-50 shadow-2xl' : 'z-10'
@@ -135,10 +136,10 @@ export const CardHand: React.FC<CardHandProps> = ({
 
         {/* Card Category Header */}
         <div className="flex items-center justify-between gap-0.5 w-full overflow-hidden">
-          <span className={`text-[6.5px] uppercase font-mono font-bold px-0.5 py-0.5 rounded border whitespace-nowrap shrink-0 leading-none ${categoryStyle.badge}`}>
+          <span className={`text-[6.5px] uppercase font-mono font-bold px-0.5 py-0.5 rounded-none border whitespace-nowrap shrink-0 leading-none ${categoryStyle.badge}`}>
             {isMoveCard ? 'Basic' : categoryStyle.label}
           </span>
-          <span className="text-[6.5px] font-mono font-bold text-amber-300 bg-amber-950/80 border border-amber-500/40 px-0.5 py-0.5 rounded flex items-center gap-0.5 whitespace-nowrap shrink-0 leading-none shadow-inner">
+          <span className="text-[6.5px] font-mono font-bold text-amber-300 bg-amber-950/80 border border-amber-500/40 px-0.5 py-0.5 rounded-none flex items-center gap-0.5 whitespace-nowrap shrink-0 leading-none shadow-inner">
             🎯 {card.range === 0 ? 'Self' : `R${card.range}`}
           </span>
         </div>
@@ -148,9 +149,9 @@ export const CardHand: React.FC<CardHandProps> = ({
           <SafeImage
             src={card.spriteUrl}
             alt={card.name}
-            className="w-5.5 h-5.5 object-contain rounded-lg shadow border border-amber-500/50 mb-0.5"
+            className="w-5.5 h-5.5 object-contain rounded-none shadow border border-amber-500/50 mb-0.5"
             fallback={
-              <div className={`p-1 rounded-full bg-slate-950/90 border border-amber-600/40 ${categoryStyle.text} mb-0.5 shadow-inner`}>
+              <div className={`p-1 rounded-none bg-slate-950/90 border border-amber-600/40 ${categoryStyle.text} mb-0.5 shadow-inner`}>
                 {renderCardIcon(card.iconName, 'w-3 h-3')}
               </div>
             }
@@ -161,11 +162,11 @@ export const CardHand: React.FC<CardHandProps> = ({
         {/* Card Facing / Attribute Badge */}
         <div className="flex items-center justify-center my-0.5">
           {facingBadge ? (
-            <span className="inline-flex items-center gap-0.5 text-[7px] font-mono font-bold text-amber-300 bg-amber-950/90 px-1 py-0.5 rounded-full border border-amber-500/40 whitespace-nowrap shadow-inner">
+            <span className="inline-flex items-center gap-0.5 text-[7px] font-mono font-bold text-amber-300 bg-amber-950/90 px-1 py-0.5 rounded-none border border-amber-500/40 whitespace-nowrap shadow-inner">
               {facingBadge}
             </span>
           ) : (
-            <span className="inline-flex items-center gap-0.5 text-[7px] font-mono text-slate-400 bg-slate-900/60 px-1 py-0.5 rounded-full border border-slate-800 whitespace-nowrap">
+            <span className="inline-flex items-center gap-0.5 text-[7px] font-mono text-slate-400 bg-slate-900/60 px-1 py-0.5 rounded-none border border-slate-800 whitespace-nowrap">
               Standard
             </span>
           )}
@@ -173,17 +174,16 @@ export const CardHand: React.FC<CardHandProps> = ({
 
         {/* Card Stats Footer */}
         <div className="flex items-center justify-center gap-1 border-t border-slate-800/80 pt-0.5 font-mono">
-          {isMoveCard ? (
+          {card.damage ? (
+            <span className="text-[8px] font-bold text-rose-400 flex items-center gap-0.5">
+              <Sword className="w-1.5 h-1.5" /> {card.damage}
+            </span>
+          ) : isMoveCard ? (
             <span className="text-[7.5px] font-bold text-emerald-400 uppercase tracking-tight">
               ∞ Unlimited
             </span>
           ) : (
             <>
-              {card.damage && (
-                <span className="text-[8px] font-bold text-rose-400 flex items-center gap-0.5">
-                  <Sword className="w-1.5 h-1.5" /> {card.damage}
-                </span>
-              )}
               {card.shield && (
                 <span className="text-[8px] font-bold text-sky-400 flex items-center gap-0.5">
                   <ShieldIcon className="w-1.5 h-1.5" /> +{card.shield}
@@ -194,7 +194,7 @@ export const CardHand: React.FC<CardHandProps> = ({
                   <HeartPulse className="w-1.5 h-1.5" /> +{card.healAmount}
                 </span>
               )}
-              {!card.damage && !card.shield && !card.healAmount && (
+              {!card.shield && !card.healAmount && (
                 <span className="text-[7.5px] font-mono text-slate-400">Tactical</span>
               )}
             </>
@@ -214,23 +214,23 @@ export const CardHand: React.FC<CardHandProps> = ({
   const abilityHandCards = hand;
 
   return (
-    <div className="w-full h-full flex items-center justify-between bg-slate-950/75 border border-amber-600/20 rounded-xl p-2.5 shadow-inner gap-4">
-      {/* Move Cards Section (Left) */}
-      <div className="flex flex-col items-center gap-1.5 flex-1">
+    <div className="w-full h-full flex items-center justify-between bg-slate-950/75 border border-amber-600/20 rounded-xl p-2 md:p-2.5 shadow-inner gap-2 md:gap-4 overflow-hidden min-w-0">
+      {/* Basic Actions Section (Left) */}
+      <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
         <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-widest border-b border-slate-800/80 w-full pb-1 mb-0.5 justify-center">
           <Compass className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Basic Movements</span>
+          <span>Basic Actions</span>
         </div>
-        <div className="flex items-center justify-center w-[320px]">
+        <div className="flex items-center justify-center min-w-0 max-w-full px-1">
           {DEFAULT_MOVE_CARDS.map((card, index) => renderCardItem(card, true, index))}
         </div>
       </div>
 
       {/* Vertical Divider */}
-      <div className="hidden md:block w-px h-28 bg-slate-800/85 self-center" />
+      <div className="hidden lg:block w-px h-28 bg-slate-800/85 self-center flex-shrink-0" />
 
       {/* Ability Cards Section (Right) */}
-      <div className="flex flex-col items-center gap-1.5 flex-[1.4]">
+      <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
         <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-amber-400 uppercase tracking-widest border-b border-slate-800/80 w-full pb-1 mb-0.5 justify-center">
           <Sparkle className="w-3.5 h-3.5 text-amber-400" />
           <span>Tactical Maneuvers</span>
@@ -238,7 +238,7 @@ export const CardHand: React.FC<CardHandProps> = ({
             {abilityHandCards.length} Cards
           </span>
         </div>
-        <div className="flex items-center justify-center w-[380px]">
+        <div className="flex items-center justify-center min-w-0 max-w-full px-1">
           {abilityHandCards.map((card, index) => renderCardItem(card, false, index))}
         </div>
       </div>

@@ -21,14 +21,28 @@ export function useMultiplayer() {
   const [connectError, setConnectError] = useState<string | null>(null);
 
   const [seats, setSeats] = useState<MultiplayerSeat[]>([
-    { id: 'player1', name: 'Commander Valerius', isAi: false, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_valerius.svg' },
-    { id: 'player2', name: 'Bot Kaelen', isAi: true, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_kaelen.svg' },
-    { id: 'player3', name: 'Bot Seraphina', isAi: true, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_seraphina.svg' },
-    { id: 'player4', name: 'Bot Ignis', isAi: true, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_ignis.svg' },
+    { id: 'player1', name: 'Commander Valerius', isAi: false, aiDifficulty: 'medium', teamId: 1, avatarUrl: 'sprites/portrait_valerius.svg' },
+    { id: 'player2', name: 'Bot Kaelen', isAi: true, aiDifficulty: 'medium', teamId: 2, avatarUrl: 'sprites/portrait_kaelen.svg' },
+    { id: 'player3', name: 'Bot Seraphina', isAi: true, aiDifficulty: 'medium', teamId: 3, avatarUrl: 'sprites/portrait_seraphina.svg' },
+    { id: 'player4', name: 'Bot Ignis', isAi: true, aiDifficulty: 'medium', teamId: 4, avatarUrl: 'sprites/portrait_ignis.svg' },
   ]);
 
   const [connectedPeers, setConnectedPeers] = useState<ConnectedPeer[]>([]);
   const [activeEmotes, setActiveEmotes] = useState<EmotePayload[]>([]);
+
+  // Auto-cleanup expired tactical shouts / emotes after 4 seconds
+  useEffect(() => {
+    if (activeEmotes.length === 0) return;
+    const now = Date.now();
+    const oldestTimestamp = Math.min(...activeEmotes.map((e) => e.timestamp));
+    const timeUntilExpiry = Math.max(50, 4000 - (now - oldestTimestamp));
+
+    const timer = setTimeout(() => {
+      setActiveEmotes((prev) => prev.filter((e) => Date.now() - e.timestamp < 4000));
+    }, timeUntilExpiry);
+
+    return () => clearTimeout(timer);
+  }, [activeEmotes]);
 
   // Auto-sync localPlayerId whenever seats or localPeerId changes
   useEffect(() => {
@@ -300,10 +314,10 @@ export function useMultiplayer() {
         setLocalPlayerName(initialHostName);
 
         const initialSeats: MultiplayerSeat[] = [
-          { id: 'player1', name: initialHostName, isAi: false, peerId, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_valerius.svg' },
-          { id: 'player2', name: 'Bot Kaelen', isAi: true, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_kaelen.svg' },
-          { id: 'player3', name: 'Bot Seraphina', isAi: true, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_seraphina.svg' },
-          { id: 'player4', name: 'Bot Ignis', isAi: true, aiDifficulty: 'medium', avatarUrl: 'sprites/portrait_ignis.svg' },
+          { id: 'player1', name: initialHostName, isAi: false, peerId, aiDifficulty: 'medium', teamId: 1, avatarUrl: 'sprites/portrait_valerius.svg' },
+          { id: 'player2', name: 'Bot Kaelen', isAi: true, aiDifficulty: 'medium', teamId: 2, avatarUrl: 'sprites/portrait_kaelen.svg' },
+          { id: 'player3', name: 'Bot Seraphina', isAi: true, aiDifficulty: 'medium', teamId: 3, avatarUrl: 'sprites/portrait_seraphina.svg' },
+          { id: 'player4', name: 'Bot Ignis', isAi: true, aiDifficulty: 'medium', teamId: 4, avatarUrl: 'sprites/portrait_ignis.svg' },
         ];
 
         const initialConnectedPeers: ConnectedPeer[] = [

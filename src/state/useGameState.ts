@@ -11,6 +11,10 @@ import type {
   ProjectedIntent,
   NetworkMessage,
   CombatFloater,
+  EmotePayload,
+  EmoteType,
+  BloodBurst,
+  PlayedCardRecord,
 } from '../types/game';
 import { 
   generateHexGrid, 
@@ -21,6 +25,9 @@ import {
   getFrontalTargetHexes,
   normalizeFacing,
   hexNeighborInDir,
+  hexDistance,
+  getDirectionFromTo,
+  hexNeighbors,
 } from '../utils/hexGrid';
 import { createStandardPlayerDeck, shuffleDeck, DEFAULT_MOVE_CARDS } from '../utils/cardsData';
 import { programAiTurn } from '../utils/aiEngine';
@@ -33,6 +40,7 @@ export interface SetupPlayerOption {
   isAi: boolean;
   aiDifficulty: 'easy' | 'medium' | 'hard';
   avatarUrl?: string;
+  teamId?: number;
 }
 
 const FACTION_MAPPING = {
@@ -49,6 +57,18 @@ const DEFAULT_AVATARS: Record<PlayerId, string> = {
   player4: 'sprites/portrait_ignis.svg',
 };
 
+// Helper to find the next alive player index starting from startIdx
+const getNextAlivePlayerIdx = (playersList: PlayerState[], startIdx: number): number => {
+  if (!playersList.length || playersList.every(p => p.isEliminated)) return 0;
+  let idx = (startIdx + playersList.length) % playersList.length;
+  let attempts = 0;
+  while (playersList[idx]?.isEliminated && attempts < playersList.length) {
+    idx = (idx + 1) % playersList.length;
+    attempts++;
+  }
+  return idx;
+};
+
 export function useGameState() {
   const [gamePhase, setGamePhase] = useState<GamePhase>('setup');
   const [round, setRound] = useState<number>(1);
@@ -56,10 +76,46 @@ export function useGameState() {
   const [currentSlotIndex, setCurrentSlotIndex] = useState<number>(0);
   const [priorityPlayerIdx, setPriorityPlayerIdx] = useState<number>(0);
   const [resolvingTurnOrder, setResolvingTurnOrder] = useState<number>(0);
-
+  const [previousPlayedCard, setPreviousPlayedCard] = useState<PlayedCardRecord | null>(null);
   const [players, setPlayers] = useState<PlayerState[]>([]);
+
+  // Compute upcoming card about to be played in the current turn step
+  const currentPlayedCard = useMemo<PlayedCardRecord | null>(() => {
+    if (gamePhase !== 'resolving' || !players.length) return null;
+    const order = [];
+    for (let i = 0; i < players.length; i++) {
+      order.push((priorityPlayerIdx + i) % players.length);
+    }
+    const actingPlayerIdx = order[resolvingTurnOrder];
+    const actor = players[actingPlayerIdx];
+    if (!actor || actor.isEliminated) return null;
+    const card = actor.programmedQueue[currentSlotIndex] || null;
+    return {
+      player: actor,
+      card,
+      slotIndex: currentSlotIndex,
+      stepNumber: resolvingTurnOrder + 1,
+    };
+  }, [gamePhase, players, priorityPlayerIdx, resolvingTurnOrder, currentSlotIndex]);
   const [roundStartStates, setRoundStartStates] = useState<Record<PlayerId, { coord: AxialCoord; facing: number }>>({} as Record<PlayerId, { coord: AxialCoord; facing: number }>);
   const [floaters, setFloaters] = useState<CombatFloater[]>([]);
+  const [bloodBursts, setBloodBursts] = useState<BloodBurst[]>([]);
+  const [usedEmoteThisRound, setUsedEmoteThisRound] = useState<Record<string, boolean>>({});
+  const [activeEmotes, setActiveEmotes] = useState<EmotePayload[]>([]);
+
+  // Auto-cleanup expired tactical shouts / emotes after 4 seconds
+  useEffect(() => {
+    if (activeEmotes.length === 0) return;
+    const now = Date.now();
+    const oldestTimestamp = Math.min(...activeEmotes.map(e => e.timestamp));
+    const timeUntilExpiry = Math.max(50, 4000 - (now - oldestTimestamp));
+
+    const timer = setTimeout(() => {
+      setActiveEmotes(prev => prev.filter(e => Date.now() - e.timestamp < 4000));
+    }, timeUntilExpiry);
+
+    return () => clearTimeout(timer);
+  }, [activeEmotes]);
 
   const addFloater = useCallback((coord: AxialCoord, text: string, type: CombatFloater['type']) => {
     const newFloater: CombatFloater = {
@@ -72,15 +128,35 @@ export function useGameState() {
     setFloaters(prev => [...prev, newFloater]);
   }, []);
 
-  // Cleanup floaters after 1.3s
+  const triggerHeroDeath = useCallback((coord: AxialCoord) => {
+    setHexGrid(prevGrid => prevGrid.map(t => hexEquals(t.coord, coord) ? { ...t, isBloody: true, bloodSeed: Math.random() } : t));
+    const newBurst: BloodBurst = {
+      id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      coord,
+      createdAt: Date.now(),
+    };
+    setBloodBursts(prev => [...prev, newBurst]);
+  }, []);
+
+  // Cleanup floaters after 2.5s
   useEffect(() => {
     if (floaters.length === 0) return;
     const timer = setTimeout(() => {
       const now = Date.now();
-      setFloaters(prev => prev.filter(f => now - f.createdAt < 1250));
-    }, 300);
+      setFloaters(prev => prev.filter(f => now - f.createdAt < 2500));
+    }, 600);
     return () => clearTimeout(timer);
   }, [floaters]);
+
+  // Cleanup blood particle bursts after 2.2s
+  useEffect(() => {
+    if (bloodBursts.length === 0) return;
+    const timer = setTimeout(() => {
+      const now = Date.now();
+      setBloodBursts(prev => prev.filter(b => now - b.createdAt < 2200));
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [bloodBursts]);
   const [hexGrid, setHexGrid] = useState<HexTile[]>([]);
   const [battleLog, setBattleLog] = useState<BattleLogEntry[]>([]);
   
@@ -114,11 +190,11 @@ export function useGameState() {
 
   // Start new match
   const initGame = useCallback((setupOptions: SetupPlayerOption[], actionsCount: number = 3) => {
-    const grid = generateHexGrid(4);
+    const grid = generateHexGrid(3);
     setHexGrid(grid);
     setActionsPerRound(actionsCount);
 
-    const startPos = getStartingPositions(4);
+    const startPos = getStartingPositions(3);
 
     const initialPlayers: PlayerState[] = setupOptions.map((opt) => {
       const fullDeck = createStandardPlayerDeck();
@@ -127,12 +203,20 @@ export function useGameState() {
       const drawPile = shuffled.slice(5);
 
 
+      const defaultTeamMapping: Record<PlayerId, number> = {
+        player1: 1,
+        player2: 2,
+        player3: 3,
+        player4: 4,
+      };
+
       return {
         id: opt.id,
         name: opt.name,
         isAi: opt.isAi,
         aiDifficulty: opt.aiDifficulty,
         faction: FACTION_MAPPING[opt.id],
+        teamId: opt.teamId ?? defaultTeamMapping[opt.id],
         avatarUrl: opt.avatarUrl || DEFAULT_AVATARS[opt.id],
         hp: 100,
         maxHp: 100,
@@ -163,9 +247,13 @@ export function useGameState() {
     setCurrentSlotIndex(0);
     setPriorityPlayerIdx(0);
     setResolvingTurnOrder(0);
+    setPreviousPlayedCard(null);
     setWinner(null);
     setSelectedHandCard(null);
     setBattleLog([]);
+    setUsedEmoteThisRound({});
+    setActiveEmotes([]);
+    setBloodBursts([]);
     // If ALL initialized players are AI bots (no human players), automatically program AI turns and start resolving!
     const hasHuman = initialPlayers.some(p => !p.isAi);
     if (!hasHuman) {
@@ -288,6 +376,7 @@ export function useGameState() {
 
       setCurrentSlotIndex(0);
       setResolvingTurnOrder(0);
+      setPreviousPlayedCard(null);
       setGamePhase('resolving');
       setIsAutoPlay(true);
       addLog(`Round ${round} Planning locked by all Commanders. Commencing execution!`, 'system');
@@ -298,6 +387,32 @@ export function useGameState() {
     setPlayers(updated);
     sound.playClick();
   }, [localPlayerId, hexGrid, round, addLog, players]);
+
+  // Execute emote action (1 per round limit) purely for social interaction & fun
+  const handleEmoteAction = useCallback(
+    (senderId: PlayerId, senderName: string, emote: EmoteType, text: string) => {
+      if (usedEmoteThisRound[senderId]) {
+        return false;
+      }
+
+      const payload: EmotePayload = {
+        id: Math.random().toString(36).substring(2, 9),
+        senderId,
+        senderName,
+        emote,
+        text,
+        timestamp: Date.now(),
+      };
+
+      setUsedEmoteThisRound(prev => ({ ...prev, [senderId]: true }));
+      setActiveEmotes(prev => [...prev.filter(e => Date.now() - e.timestamp < 10000).slice(-9), payload]);
+
+      addLog(`📣 ${senderName}: "${text}"`, 'system', senderId);
+      sound.playCardSelect();
+      return true;
+    },
+    [usedEmoteThisRound, addLog]
+  );
 
   // Network Sync Listener
   useEffect(() => {
@@ -384,14 +499,15 @@ export function useGameState() {
         if (rRound !== undefined) setRound(rRound);
         if (rWinner !== undefined) setWinner(rWinner);
       } else if (msg.type === 'EMOTE' && msg.payload) {
-        const { senderName, text } = msg.payload;
-        addLog(`[Emote] ${senderName}: ${text}`, 'system');
-        sound.playCardSelect();
+        const { senderId, senderName, emote, text } = msg.payload;
+        if (senderId && senderName && emote && text) {
+          handleEmoteAction(senderId, senderName, emote, text);
+        }
       }
     });
 
     return () => unsubscribe();
-  }, [hexGrid, gamePhase, addLog]);
+  }, [hexGrid, gamePhase, addLog, handleEmoteAction]);
 
 
   // Execute single resolution step for current active player in current slot
@@ -413,7 +529,15 @@ export function useGameState() {
     let updatedPlayers = [...players];
 
     if (!actor.isEliminated) {
-      const actionCard = actor.programmedQueue[currentSlotIndex];
+      const actionCard = actor.programmedQueue[currentSlotIndex] || null;
+
+      // Save executed card into previousPlayedCard (Red Box)
+      setPreviousPlayedCard({
+        player: actor,
+        card: actionCard,
+        slotIndex: currentSlotIndex,
+        stepNumber: resolvingTurnOrder + 1,
+      });
 
       if (actionCard) {
         // Execute card effect
@@ -428,15 +552,53 @@ export function useGameState() {
             addLog(`${actor.name} played ${actionCard.name} and rotated facing.`, 'move', actor.id);
           } else {
             const moveType = actionCard.facingMoveType || 'forward';
-            const res = getRelativeHex(actor.coord, actor.facing, moveType, actionCard.range);
-            targetCoord = res.targetCoord;
-            targetFacing = res.newFacing;
+            if (moveType === 'teleport_nearest') {
+              const rivals = updatedPlayers.filter(p => !p.isEliminated && p.id !== actor.id);
+              if (rivals.length > 0) {
+                const actorFacingDir = actor.facing;
+                const sortedRivals = [...rivals].sort((a, b) => {
+                  const distA = hexDistance(actor.coord, a.coord);
+                  const distB = hexDistance(actor.coord, b.coord);
+                  const dirA = getDirectionFromTo(actor.coord, a.coord);
+                  const dirB = getDirectionFromTo(actor.coord, b.coord);
+                  const inFrontA = (dirA === actorFacingDir || dirA === normalizeFacing(actorFacingDir + 5) || dirA === normalizeFacing(actorFacingDir + 1)) ? 1 : 0;
+                  const inFrontB = (dirB === actorFacingDir || dirB === normalizeFacing(actorFacingDir + 5) || dirB === normalizeFacing(actorFacingDir + 1)) ? 1 : 0;
 
-            const isTargetOnGrid = hexGrid.length === 0 || hexGrid.some(t => hexEquals(t.coord, targetCoord));
+                  if (inFrontA !== inFrontB) return inFrontB - inFrontA;
+                  return distA - distB;
+                });
+
+                const targetRival = sortedRivals[0];
+                const neighbors = hexNeighbors(targetRival.coord);
+                const validHex = neighbors.find(nh => 
+                  (hexGrid.length === 0 || hexGrid.some(t => hexEquals(t.coord, nh) && t.terrain !== 'obstacle')) &&
+                  !updatedPlayers.some(p => !p.isEliminated && hexEquals(p.coord, nh))
+                ) || actor.coord;
+
+                targetCoord = validHex;
+                targetFacing = getDirectionFromTo(targetCoord, targetRival.coord);
+                addLog(`✨ SHADOW STEP! ${actor.name} teleported behind ${targetRival.name}!`, 'move', actor.id);
+                addFloater(actor.coord, 'SHADOW STEP!', 'heal');
+              } else {
+                targetCoord = actor.coord;
+                targetFacing = actor.facing;
+              }
+            } else {
+              const res = getRelativeHex(actor.coord, actor.facing, moveType, actionCard.range);
+              targetCoord = res.targetCoord;
+              targetFacing = res.newFacing;
+            }
+
+            const isTargetOnGrid = hexGrid.length === 0 || hexGrid.some(t => hexEquals(t.coord, targetCoord) && t.terrain !== 'obstacle');
 
             if (!isTargetOnGrid) {
-              // Boundary wall hit! Movement blocked
-              addLog(`WALL BLOCK! ${actor.name}'s movement was blocked by the arena boundary wall!`, 'move', actor.id);
+              const isObstacle = hexGrid.some(t => hexEquals(t.coord, targetCoord) && t.terrain === 'obstacle');
+              if (isObstacle) {
+                addLog(`OBSTACLE BLOCK! ${actor.name}'s movement was blocked by an obstacle pillar!`, 'move', actor.id);
+                addFloater(actor.coord, 'BLOCKED!', 'collision');
+              } else {
+                addLog(`WALL BLOCK! ${actor.name}'s movement was blocked by the arena boundary wall!`, 'move', actor.id);
+              }
               targetCoord = actor.coord;
               updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, facing: targetFacing } : p);
             } else {
@@ -444,26 +606,127 @@ export function useGameState() {
               const occupantIdx = updatedPlayers.findIndex(p => !p.isEliminated && p.id !== actor.id && hexEquals(p.coord, targetCoord));
             
               if (occupantIdx !== -1) {
-                // Collision bump! Both take 10 collision damage
+                // Collision bump! Moving character steps onto targetCoord and bumps occupant out of the way.
                 const occupant = updatedPlayers[occupantIdx];
                 
-                addFloater(actor.coord, 'COLLISION -10', 'collision');
-                addFloater(occupant.coord, 'COLLISION -10', 'collision');
+                // Check if occupant is currently UNYIELDING (via round-long buff or active turn slot card)
+                const occupantActiveCard = occupant.programmedQueue[currentSlotIndex];
+                const isOccupantUnyielding = (occupant.buffs || []).some(b => b.type === 'unyielding') || occupantActiveCard?.isUnyieldingSlot;
 
-                const actorBeforeHp = actor.hp;
-
-                updatedPlayers = updatedPlayers.map(p => {
-                  if (p.id === actor.id || p.id === occupant.id) {
-                    const newHp = Math.max(0, p.hp - 10);
-                    return { ...p, hp: newHp, isEliminated: newHp === 0 };
+                if (isOccupantUnyielding) {
+                  // Occupant is IMMOVABLE! Actor is repelled back, takes 15 damage (plus recoil if spiked bulwark)
+                  const recoilDmg = occupantActiveCard?.type === 'spiked_bulwark' ? 20 : 15;
+                  
+                  // Kinetic Absorber shield boost check
+                  let kineticBonusShield = 0;
+                  if (occupantActiveCard?.type === 'kinetic_absorber') {
+                    kineticBonusShield = 20;
                   }
-                  return p;
-                });
 
-                const actorAfterHp = updatedPlayers.find(p => p.id === actor.id)?.hp ?? actorBeforeHp;
-                addLog(`COLLISION! ${actor.name} bumped into ${occupant.name}! Both take 10 collision damage.`, 'move', actor.id, { before: actorBeforeHp, after: actorAfterHp });
+                  const actorBeforeHp = actor.hp;
+                  updatedPlayers = updatedPlayers.map(p => {
+                    if (p.id === actor.id) {
+                      const newHp = Math.max(0, p.hp - recoilDmg);
+                      return { ...p, hp: newHp, isEliminated: newHp === 0 };
+                    }
+                    if (p.id === occupant.id && kineticBonusShield > 0) {
+                      return { ...p, shield: p.shield + kineticBonusShield };
+                    }
+                    return p;
+                  });
 
-                sound.playHeavyHit();
+                  const actorAfterHp = updatedPlayers.find(p => p.id === actor.id)?.hp ?? actorBeforeHp;
+                  addFloater(occupant.coord, 'UNYIELDING! BLOCKED', 'shield_absorb');
+                  addFloater(actor.coord, `REPELLED -${recoilDmg}`, 'collision');
+                  
+                  if (kineticBonusShield > 0) {
+                    addFloater(occupant.coord, '+20 KINETIC SHIELD', 'shield_up');
+                  }
+
+                  addLog(`🛡️ UNYIELDING BASTION! ${actor.name} tried to bump into ${occupant.name}, but ${occupant.name} stood immovable! ${actor.name} takes ${recoilDmg} recoil damage.`, 'move', actor.id, { before: actorBeforeHp, after: actorAfterHp });
+                  sound.playShield();
+                  targetCoord = actor.coord;
+                } else {
+                  const moveDir = getDirectionFromTo(actor.coord, targetCoord);
+
+                  // Priority for bump direction:
+                  // 1. Straight back along moveDir (offset 0)
+                  // 2. Diagonal back-right / back-left (offsets 1, 5)
+                  // 3. Side-right / side-left (offsets 2, 4)
+                  // 4. Reverse back into actor's former position (offset 3)
+                  const dirOffsets = [0, 1, 5, 2, 4, 3];
+                  let bumpCoord: AxialCoord | null = null;
+
+                  for (const offset of dirOffsets) {
+                    const candidateDir = normalizeFacing(moveDir + offset);
+                    const candidateCoord = hexNeighborInDir(targetCoord, candidateDir);
+
+                    const isCandidateOnGrid = hexGrid.length === 0 || hexGrid.some(t => hexEquals(t.coord, candidateCoord) && t.terrain !== 'obstacle');
+                    const isCandidateOccupied = hexEquals(candidateCoord, targetCoord) || updatedPlayers.some(p => !p.isEliminated && p.id !== occupant.id && hexEquals(p.coord, candidateCoord));
+
+                    if (isCandidateOnGrid && !isCandidateOccupied) {
+                      bumpCoord = candidateCoord;
+                      break;
+                    }
+                  }
+
+                  const actorBeforeHp = actor.hp;
+
+                  const isTeammate = occupant.teamId === actor.teamId;
+                  const collisionDmg = isTeammate ? 0 : 10;
+
+                  if (bumpCoord) {
+                    // Occupant bumped out of the way to bumpCoord, actor moves to targetCoord
+                    updatedPlayers = updatedPlayers.map(p => {
+                      if (p.id === actor.id) {
+                        const newHp = Math.max(0, p.hp - collisionDmg);
+                        return { ...p, coord: targetCoord, facing: targetFacing, hp: newHp, isEliminated: newHp === 0 };
+                      }
+                      if (p.id === occupant.id) {
+                        const newHp = Math.max(0, p.hp - collisionDmg);
+                        return { ...p, coord: bumpCoord, hp: newHp, isEliminated: newHp === 0 };
+                      }
+                      return p;
+                    });
+
+                    const actorAfterHp = updatedPlayers.find(p => p.id === actor.id)?.hp ?? actorBeforeHp;
+                    if (isTeammate) {
+                      addFloater(targetCoord, 'NO FRIENDLY FIRE', 'shield_absorb');
+                      addFloater(bumpCoord, 'TEAM BUMP', 'shield_absorb');
+                      addLog(`BUMP! ${actor.name} bumped teammate ${occupant.name} out of the way to (${bumpCoord.q}, ${bumpCoord.r})! (No friendly fire damage).`, 'move', actor.id);
+                    } else {
+                      addFloater(targetCoord, 'BUMP! -10', 'collision');
+                      addFloater(bumpCoord, 'BUMPED! -10', 'collision');
+                      addLog(`BUMP! ${actor.name} bumped ${occupant.name} out of the way to (${bumpCoord.q}, ${bumpCoord.r})! Both take 10 collision damage.`, 'move', actor.id, { before: actorBeforeHp, after: actorAfterHp });
+                    }
+                    sound.playHeavyHit();
+                  } else {
+                    // Completely surrounded / nowhere to bump: fallback to collision wall block
+                    if (isTeammate) {
+                      addFloater(actor.coord, 'NO FRIENDLY FIRE', 'shield_absorb');
+                      addFloater(occupant.coord, 'NO FRIENDLY FIRE', 'shield_absorb');
+                    } else {
+                      addFloater(actor.coord, 'COLLISION -10', 'collision');
+                      addFloater(occupant.coord, 'COLLISION -10', 'collision');
+                    }
+
+                    updatedPlayers = updatedPlayers.map(p => {
+                      if (p.id === actor.id || p.id === occupant.id) {
+                        const newHp = Math.max(0, p.hp - collisionDmg);
+                        return { ...p, hp: newHp, isEliminated: newHp === 0 };
+                      }
+                      return p;
+                    });
+
+                    const actorAfterHp = updatedPlayers.find(p => p.id === actor.id)?.hp ?? actorBeforeHp;
+                    if (isTeammate) {
+                      addLog(`COLLISION! ${actor.name} bumped into teammate ${occupant.name}! (No friendly fire damage).`, 'move', actor.id);
+                    } else {
+                      addLog(`COLLISION! ${actor.name} bumped into ${occupant.name} but nowhere to push! Both take 10 collision damage.`, 'move', actor.id, { before: actorBeforeHp, after: actorAfterHp });
+                    }
+                    sound.playHeavyHit();
+                  }
+                }
               } else {
                 // Move cleanly
                 updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, coord: targetCoord, facing: targetFacing } : p);
@@ -535,19 +798,72 @@ export function useGameState() {
             effectType: 'move',
           });
         } 
-        else if (actionCard.category === 'attack') {
-          const baseDmg = actionCard.damage || 20;
+        else if (actionCard.category === 'attack' || actionCard.damage !== undefined) {
+          const baseDmg = actionCard.damage || 0;
           const attackBuff = actor.buffs?.find(b => b.type === 'attackBoost');
           const bonusDmg = attackBuff ? attackBuff.value : 0;
-          const dmg = baseDmg + bonusDmg;
+          const dmg = baseDmg > 0 ? baseDmg + bonusDmg : 0;
+
+          // Apply turnAmount if card provides turn/pivot (e.g. Parry Dash)
+          if (actionCard.turnAmount) {
+            const newFacing = rotateFacing(actor.facing, actionCard.turnAmount);
+            updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, facing: newFacing } : p);
+          }
+
+          // Apply instant self shield / heal on attack/utility if present
+          if (actionCard.shield && actionCard.shield > 0) {
+            const sh = actionCard.shield;
+            updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, shield: p.shield + sh } : p);
+            addFloater(actor.coord, `+${sh} SHIELD`, 'shield_up');
+          }
+          if (actionCard.healAmount) {
+            const healAmt = actionCard.healAmount;
+            const beforeHp = actor.hp;
+            const newHp = healAmt > 0 
+              ? Math.min(actor.maxHp, actor.hp + healAmt)
+              : Math.max(1, actor.hp + healAmt);
+            updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, hp: newHp } : p);
+            addFloater(actor.coord, `${healAmt > 0 ? '+' : ''}${healAmt} HP`, healAmt > 0 ? 'heal' : 'damage');
+            addLog(`${actor.name} ${healAmt > 0 ? 'healed' : 'sacrificed'} ${Math.abs(healAmt)} HP from ${actionCard.name}.`, 'system', actor.id, { before: beforeHp, after: newHp });
+          }
+
+          // Apply round-long buffs if present on card
+          if (actionCard.buffType && actionCard.buffDuration && actionCard.buffValue) {
+            const bType = actionCard.buffType;
+            const bDur = actionCard.buffDuration;
+            const bVal = actionCard.buffValue;
+            const buffId = `${bType}_${Date.now()}`;
+            updatedPlayers = updatedPlayers.map(p => {
+              if (p.id !== actor.id) return p;
+              const filtered = (p.buffs || []).filter(b => b.type !== bType);
+              const bName = bType === 'attackBoost' ? `Empowered (+${bVal} DMG)` : bType === 'shield' ? `Fortified (+${bVal} Shield)` : `Regen (+${bVal} HP)`;
+              return {
+                ...p,
+                buffs: [...filtered, { id: buffId, type: bType, name: bName, duration: bDur, value: bVal }]
+              };
+            });
+            addLog(`✨ ${actor.name} activated ${actionCard.name} buff! (${bType} +${bVal} for ${bDur} rounds)`, 'rune', actor.id);
+            addFloater(actor.coord, `BUFF +${bVal}`, 'rune');
+          }
 
           const targetHexes = getFrontalTargetHexes(actor.coord, actor.facing, actionCard.facingAttackType || 'frontal', actionCard.range);
 
           const hitEnemies = updatedPlayers.filter(p => 
-            p.id !== actor.id && !p.isEliminated && targetHexes.some(th => hexEquals(th, p.coord))
+            p.id !== actor.id && p.teamId !== actor.teamId && !p.isEliminated && targetHexes.some(th => hexEquals(th, p.coord))
           );
 
-          if (hitEnemies.length > 0) {
+          const hitTeammates = updatedPlayers.filter(p =>
+            p.id !== actor.id && p.teamId === actor.teamId && !p.isEliminated && targetHexes.some(th => hexEquals(th, p.coord))
+          );
+
+          if (hitTeammates.length > 0) {
+            hitTeammates.forEach(ally => {
+              addFloater(ally.coord, 'NO FRIENDLY FIRE', 'shield_absorb');
+            });
+            addLog(`🛡️ Friendly Fire disabled: Teammate(s) protected from ${actor.name}'s ${actionCard.name}!`, 'defense', actor.id);
+          }
+
+          if (hitEnemies.length > 0 && dmg > 0) {
             hitEnemies.forEach(target => {
               const beforeHp = target.hp;
               const absorbed = Math.min(target.shield, dmg);
@@ -582,46 +898,84 @@ export function useGameState() {
 
               addLog(`${actor.name} struck ${target.name} with ${actionCard.name} for ${netDamage} damage!${bonusDmg > 0 ? ' (+10 Empowered DMG)' : ''}`, 'attack', actor.id, { before: beforeHp, after: newHp });
               
+              // Handle PULL DISTANCE (Scorpion pull / Hook shot)
+              if (actionCard.pullDist && actionCard.pullDist > 0 && !isDead) {
+                const targetActiveCard = target.programmedQueue[currentSlotIndex];
+                const isTargetUnyielding = (target.buffs || []).some(b => b.type === 'unyielding') || targetActiveCard?.isUnyieldingSlot;
+
+                if (isTargetUnyielding) {
+                  addFloater(target.coord, 'IMMUNE TO PULL!', 'shield_absorb');
+                  addLog(`🛡️ ${target.name} resisted ${actor.name}'s pull with Unyielding Stance!`, 'defense', target.id);
+                } else {
+                  const pullDist = actionCard.pullDist;
+                  const dirTowardsActor = getDirectionFromTo(target.coord, actor.coord);
+                  let currCoord = target.coord;
+                  
+                  for (let step = 0; step < pullDist; step++) {
+                    const nextCoord = hexNeighborInDir(currCoord, dirTowardsActor);
+                    const isOnGrid = hexGrid.length === 0 || hexGrid.some(t => hexEquals(t.coord, nextCoord) && t.terrain !== 'obstacle');
+                    const isOccupied = updatedPlayers.some(p => !p.isEliminated && hexEquals(p.coord, nextCoord));
+                    
+                    if (!isOnGrid || isOccupied) {
+                      break;
+                    }
+                    currCoord = nextCoord;
+                  }
+
+                  updatedPlayers = updatedPlayers.map(p => p.id === target.id ? { ...p, coord: currCoord } : p);
+                  addFloater(currCoord, 'PULLED!', 'collision');
+                  addLog(`🪝 GET OVER HERE! ${actor.name} pulled ${target.name} closer with ${actionCard.name}!`, 'move', actor.id);
+                }
+              }
+
               // Add knockback logic for attacks with pushDist!
               if (actionCard.pushDist && actionCard.pushDist > 0 && !isDead) {
-                const pushDist = actionCard.pushDist;
-                const pushDir = normalizeFacing(actor.facing);
-                let currCoord = target.coord;
-                let collided = false;
-                
-                for (let step = 0; step < pushDist; step++) {
-                  const nextCoord = hexNeighborInDir(currCoord, pushDir);
-                  const isOnGrid = hexGrid.length === 0 || hexGrid.some(t => hexEquals(t.coord, nextCoord) && t.terrain !== 'obstacle');
-                  const isOccupied = updatedPlayers.some(p => !p.isEliminated && hexEquals(p.coord, nextCoord));
-                  
-                  if (!isOnGrid || isOccupied) {
-                    collided = true;
-                    break;
-                  }
-                  currCoord = nextCoord;
-                }
-                
-                const targetPrePushHp = updatedPlayers.find(p => p.id === target.id)?.hp ?? newHp;
-                updatedPlayers = updatedPlayers.map(p => {
-                  if (p.id === target.id) {
-                    const finalHp = collided ? Math.max(0, p.hp - 10) : p.hp;
-                    return { 
-                      ...p, 
-                      coord: currCoord, 
-                      hp: finalHp, 
-                      isEliminated: finalHp === 0 
-                    };
-                  }
-                  return p;
-                });
+                const targetActiveCard = target.programmedQueue[currentSlotIndex];
+                const isTargetUnyielding = (target.buffs || []).some(b => b.type === 'unyielding') || targetActiveCard?.isUnyieldingSlot;
 
-                const targetPostPushHp = updatedPlayers.find(p => p.id === target.id)?.hp ?? targetPrePushHp;
-                
-                if (collided) {
-                  addFloater(currCoord, 'COLLISION -10', 'collision');
-                  addLog(`${target.name} was knocked back by ${actionCard.name} and collided! Taking 10 extra collision damage.`, 'move', actor.id, { before: targetPrePushHp, after: targetPostPushHp });
+                if (isTargetUnyielding) {
+                  addFloater(target.coord, 'IMMUNE TO PUSH!', 'shield_absorb');
+                  addLog(`🛡️ ${target.name} resisted knockback with Unyielding Stance!`, 'defense', target.id);
                 } else {
-                  addLog(`${target.name} was knocked back 1 hex by ${actionCard.name}.`, 'move', actor.id);
+                  const pushDist = actionCard.pushDist;
+                  const pushDir = normalizeFacing(actor.facing);
+                  let currCoord = target.coord;
+                  let collided = false;
+                  
+                  for (let step = 0; step < pushDist; step++) {
+                    const nextCoord = hexNeighborInDir(currCoord, pushDir);
+                    const isOnGrid = hexGrid.length === 0 || hexGrid.some(t => hexEquals(t.coord, nextCoord) && t.terrain !== 'obstacle');
+                    const isOccupied = updatedPlayers.some(p => !p.isEliminated && hexEquals(p.coord, nextCoord));
+                    
+                    if (!isOnGrid || isOccupied) {
+                      collided = true;
+                      break;
+                    }
+                    currCoord = nextCoord;
+                  }
+                  
+                  const targetPrePushHp = updatedPlayers.find(p => p.id === target.id)?.hp ?? newHp;
+                  updatedPlayers = updatedPlayers.map(p => {
+                    if (p.id === target.id) {
+                      const finalHp = collided ? Math.max(0, p.hp - 10) : p.hp;
+                      return { 
+                        ...p, 
+                        coord: currCoord, 
+                        hp: finalHp, 
+                        isEliminated: finalHp === 0 
+                      };
+                    }
+                    return p;
+                  });
+
+                  const targetPostPushHp = updatedPlayers.find(p => p.id === target.id)?.hp ?? targetPrePushHp;
+                  
+                  if (collided) {
+                    addFloater(currCoord, 'COLLISION -10', 'collision');
+                    addLog(`${target.name} was knocked back by ${actionCard.name} and collided! Taking 10 extra collision damage.`, 'move', actor.id, { before: targetPrePushHp, after: targetPostPushHp });
+                  } else {
+                    addLog(`${target.name} was knocked back by ${actionCard.name}.`, 'move', actor.id);
+                  }
                 }
               }
 
@@ -631,8 +985,8 @@ export function useGameState() {
               }
             });
 
-            if (actionCard.type === 'fireball') sound.playFireball();
-            else if (actionCard.type === 'heavy') sound.playHeavyHit();
+            if (actionCard.type === 'fireball' || actionCard.type === 'supernova') sound.playFireball();
+            else if (actionCard.type === 'heavy' || actionCard.type === 'seismic_slam') sound.playHeavyHit();
             else sound.playSlash();
 
             setCurrentAnimation({
@@ -642,13 +996,9 @@ export function useGameState() {
               effectType: 'attack',
               damageDealt: dmg,
             });
-          } else {
+          } else if (dmg > 0) {
             addLog(`${actor.name} used ${actionCard.name} towards facing, but no enemies were in range!`, 'attack', actor.id);
-            if (targetHexes.length > 0) {
-              targetHexes.forEach(hex => addFloater(hex, 'MISS!', 'miss'));
-            } else {
-              addFloater(actor.coord, 'MISS!', 'miss');
-            }
+            addFloater(actor.coord, 'MISS!', 'miss');
             setCurrentAnimation({
               actorId: actor.id,
               targetCoords: targetHexes,
@@ -658,96 +1008,105 @@ export function useGameState() {
           }
         }
         else if (actionCard.category === 'defense') {
-          if (actionCard.type === 'shield') {
-            const amount = actionCard.shield || 30;
+          // Dynamic defense handling
+          const amount = actionCard.shield || 0;
+          if (amount > 0) {
             updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, shield: p.shield + amount } : p);
             addFloater(actor.coord, `+${amount} SHIELD`, 'shield_up');
-            addLog(`${actor.name} activated ${actionCard.name} (+${amount} Shield).`, 'defense', actor.id);
-            sound.playShield();
-          } else if (actionCard.type === 'counter') {
-            updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, shield: p.shield + 15 } : p);
-            addFloater(actor.coord, '+15 COUNTER SHIELD', 'shield_up');
-            addLog(`${actor.name} prepared a Riposte Counter-Strike.`, 'defense', actor.id);
-            sound.playShield();
           }
-        }
-        else if (actionCard.category === 'utility') {
-          if (actionCard.type === 'meditate') {
-            const healAmt = actionCard.healAmount || 20;
+          if (actionCard.healAmount) {
+            const healAmt = actionCard.healAmount;
             const beforeHp = actor.hp;
             const newHp = Math.min(actor.maxHp, actor.hp + healAmt);
             updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, hp: newHp } : p);
             addFloater(actor.coord, `+${healAmt} HP`, 'heal');
-            addLog(`${actor.name} cast ${actionCard.name} and healed ${healAmt} HP.`, 'system', actor.id, { before: beforeHp, after: newHp });
-            sound.playHeal();
-          } else if (actionCard.type === 'push') {
-            const pushDist = actionCard.pushDist || 2;
-            const pushDir = normalizeFacing(actor.facing);
-            const targetHexes = getFrontalTargetHexes(actor.coord, actor.facing, 'frontal', actionCard.range || 1);
-            
+            addLog(`${actor.name} healed ${healAmt} HP from ${actionCard.name}.`, 'system', actor.id, { before: beforeHp, after: newHp });
+          }
+          if (actionCard.turnAmount) {
+            const newFacing = rotateFacing(actor.facing, actionCard.turnAmount);
+            updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, facing: newFacing } : p);
+          }
+          if (actionCard.buffType && actionCard.buffDuration && actionCard.buffValue) {
+            const bType = actionCard.buffType;
+            const bDur = actionCard.buffDuration;
+            const bVal = actionCard.buffValue;
+            const buffId = `${bType}_${Date.now()}`;
+            updatedPlayers = updatedPlayers.map(p => {
+              if (p.id !== actor.id) return p;
+              const filtered = (p.buffs || []).filter(b => b.type !== bType);
+              return {
+                ...p,
+                buffs: [...filtered, { id: buffId, type: bType, name: `Fortified (+${bVal})`, duration: bDur, value: bVal }]
+              };
+            });
+            addFloater(actor.coord, `BUFF +${bVal}`, 'rune');
+          }
+          addLog(`${actor.name} activated ${actionCard.name}.`, 'defense', actor.id);
+          sound.playShield();
+        }
+        else if (actionCard.category === 'utility') {
+          // Dynamic utility card execution (pulls, heals, buffs)
+          if (actionCard.pullDist && actionCard.pullDist > 0) {
+            const pullDist = actionCard.pullDist;
+            const targetHexes = getFrontalTargetHexes(actor.coord, actor.facing, actionCard.facingAttackType || 'line', actionCard.range || 3);
             const hitEnemies = updatedPlayers.filter(p => 
-              p.id !== actor.id && !p.isEliminated && targetHexes.some(th => hexEquals(th, p.coord))
+              p.id !== actor.id && p.teamId !== actor.teamId && !p.isEliminated && (actionCard.facingAttackType === 'aoe' ? hexDistance(actor.coord, p.coord) <= actionCard.range : targetHexes.some(th => hexEquals(th, p.coord)))
             );
 
             if (hitEnemies.length > 0) {
               hitEnemies.forEach(target => {
+                const dirTowardsActor = getDirectionFromTo(target.coord, actor.coord);
                 let currCoord = target.coord;
-                let collided = false;
                 
-                for (let step = 0; step < pushDist; step++) {
-                  const nextCoord = hexNeighborInDir(currCoord, pushDir);
+                for (let step = 0; step < pullDist; step++) {
+                  const nextCoord = hexNeighborInDir(currCoord, dirTowardsActor);
                   const isOnGrid = hexGrid.length === 0 || hexGrid.some(t => hexEquals(t.coord, nextCoord) && t.terrain !== 'obstacle');
                   const isOccupied = updatedPlayers.some(p => !p.isEliminated && hexEquals(p.coord, nextCoord));
-                  
-                  if (!isOnGrid || isOccupied) {
-                    collided = true;
-                    break;
-                  }
+                  if (!isOnGrid || isOccupied) break;
                   currCoord = nextCoord;
                 }
-                
-                const targetId = target.id;
-                const beforeHp = target.hp;
-                const finalHp = collided ? Math.max(0, target.hp - 10) : target.hp;
 
-                updatedPlayers = updatedPlayers.map(p => {
-                  if (p.id === targetId) {
-                    return { 
-                      ...p, 
-                      coord: currCoord, 
-                      hp: finalHp, 
-                      isEliminated: finalHp === 0 
-                    };
-                  }
-                  return p;
-                });
-                
-                if (collided) {
-                  addFloater(currCoord, 'PUSH COLLISION -10', 'collision');
-                  addLog(`${actor.name} pushed ${target.name} back with ${actionCard.name}, colliding with a barrier or unit! ${target.name} takes 10 collision damage.`, 'move', actor.id, { before: beforeHp, after: finalHp });
-                } else {
-                  addFloater(currCoord, 'KNOCKBACK', 'collision');
-                  addLog(`${actor.name} pushed ${target.name} back ${pushDist} hexes with ${actionCard.name}.`, 'move', actor.id);
-                }
+                updatedPlayers = updatedPlayers.map(p => p.id === target.id ? { ...p, coord: currCoord } : p);
+                addFloater(currCoord, 'PULLED!', 'collision');
+                addLog(`🪝 ${actor.name} used ${actionCard.name} to pull ${target.name} closer!`, 'move', actor.id);
               });
-              
               sound.playHeavyHit();
-              
-              setCurrentAnimation({
-                actorId: actor.id,
-                targetCoords: targetHexes,
-                actionName: actionCard.name,
-                effectType: 'push',
-              });
             } else {
-              addLog(`${actor.name} cast ${actionCard.name}, but no enemies were in range to push!`, 'system', actor.id);
-              setCurrentAnimation({
-                actorId: actor.id,
-                targetCoords: targetHexes,
-                actionName: actionCard.name,
-                effectType: 'miss',
-              });
+              addLog(`${actor.name} cast ${actionCard.name}, but no targets were pulled!`, 'system', actor.id);
             }
+          }
+          if (actionCard.healAmount) {
+            const healAmt = actionCard.healAmount;
+            const beforeHp = actor.hp;
+            const newHp = healAmt > 0 
+              ? Math.min(actor.maxHp, actor.hp + healAmt)
+              : Math.max(1, actor.hp + healAmt);
+            updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, hp: newHp } : p);
+            addFloater(actor.coord, `${healAmt > 0 ? '+' : ''}${healAmt} HP`, healAmt > 0 ? 'heal' : 'damage');
+            addLog(`${actor.name} cast ${actionCard.name} (${healAmt > 0 ? '+' : ''}${healAmt} HP).`, 'system', actor.id, { before: beforeHp, after: newHp });
+            if (healAmt > 0) sound.playHeal();
+          }
+          if (actionCard.shield) {
+            const amount = actionCard.shield;
+            updatedPlayers = updatedPlayers.map(p => p.id === actor.id ? { ...p, shield: p.shield + amount } : p);
+            addFloater(actor.coord, `+${amount} SHIELD`, 'shield_up');
+          }
+          if (actionCard.buffType && actionCard.buffDuration && actionCard.buffValue) {
+            const bType = actionCard.buffType;
+            const bDur = actionCard.buffDuration;
+            const bVal = actionCard.buffValue;
+            const buffId = `${bType}_${Date.now()}`;
+            updatedPlayers = updatedPlayers.map(p => {
+              if (p.id !== actor.id) return p;
+              const filtered = (p.buffs || []).filter(b => b.type !== bType);
+              const bName = bType === 'attackBoost' ? `Empowered (+${bVal} DMG)` : bType === 'shield' ? `Fortified (+${bVal} Shield)` : `Regen (+${bVal} HP)`;
+              return {
+                ...p,
+                buffs: [...filtered, { id: buffId, type: bType, name: bName, duration: bDur, value: bVal }]
+              };
+            });
+            addLog(`✨ ${actor.name} activated ${actionCard.name} buff! (${bType} +${bVal} for ${bDur} rounds)`, 'rune', actor.id);
+            addFloater(actor.coord, `BUFF +${bVal}`, 'rune');
           }
         }
       } else {
@@ -755,15 +1114,33 @@ export function useGameState() {
       }
     }
 
-    // Check remaining alive players
+    // Check for newly eliminated heroes and trigger blood particle spray & bloody hex tile
+    let priorityNeedsUpdate = false;
+    players.forEach(oldP => {
+      if (!oldP.isEliminated) {
+        const newlyDead = updatedPlayers.find(up => up.id === oldP.id && up.isEliminated);
+        if (newlyDead) {
+          triggerHeroDeath(newlyDead.coord);
+          priorityNeedsUpdate = true;
+        }
+      }
+    });
+
+    if (priorityNeedsUpdate) {
+      setPriorityPlayerIdx(prev => getNextAlivePlayerIdx(updatedPlayers, prev));
+    }
+
+    // Check remaining alive players & teams
     const remainingAlive = updatedPlayers.filter(p => !p.isEliminated);
-    if (remainingAlive.length <= 1) {
+    const aliveTeams = Array.from(new Set(remainingAlive.map(p => p.teamId)));
+    if (aliveTeams.length <= 1) {
+      const winningTeamId = aliveTeams[0];
       const champ = remainingAlive[0] || null;
       setWinner(champ);
-      setGamePhase('gameover');
+      setGamePhase('ended');
       if (champ) {
         sound.playVictory();
-        addLog(`🏆 CHAMPION! ${champ.name} has defeated all rivals and won the match!`, 'system', champ.id);
+        addLog(`🏆 TEAM VICTORY! Team ${winningTeamId} has defeated all rivals and won the match!`, 'system', champ.id);
       }
       setPlayers(updatedPlayers);
       return;
@@ -852,10 +1229,10 @@ export function useGameState() {
         }
 
         // Execute Hill Damage Strike if there is an active owner/controller
-        if (triggerStrikeFor) {
+          if (triggerStrikeFor) {
           const owner = triggerStrikeFor;
           const damageAmt = 15;
-          const enemies = updatedPlayers.filter(p => !p.isEliminated && p.id !== owner.id);
+          const enemies = updatedPlayers.filter(p => !p.isEliminated && p.teamId !== owner.teamId);
 
           if (enemies.length > 0) {
             enemies.forEach(enemy => {
@@ -865,7 +1242,7 @@ export function useGameState() {
             const playerHpMap: Record<string, { before: number; after: number }> = {};
 
             updatedPlayers = updatedPlayers.map(p => {
-              if (!p.isEliminated && p.id !== owner.id) {
+              if (!p.isEliminated && p.teamId !== owner.teamId) {
                 const netDmg = Math.max(0, damageAmt - p.shield);
                 const newShield = Math.max(0, p.shield - damageAmt);
                 const newHp = Math.max(0, p.hp - netDmg);
@@ -883,19 +1260,29 @@ export function useGameState() {
               return p;
             });
 
+            // Trigger death animations (blood burst + bloody tile) for any hero killed by the KOTH strike
+            enemies.forEach(oldEnemy => {
+              const nowDead = updatedPlayers.find(p => p.id === oldEnemy.id && p.isEliminated);
+              if (nowDead) {
+                triggerHeroDeath(nowDead.coord);
+              }
+            });
+
             sound.playFireball();
             const hpChangesList = Object.values(playerHpMap);
             const firstHpChange = hpChangesList.length === 1 ? hpChangesList[0] : undefined;
-            addLog(`👑 KING OF THE HILL! ${owner.name}'s Central Hill struck all enemies for ${damageAmt} damage!`, 'hill', owner.id, firstHpChange);
+            addLog(`👑 KING OF THE HILL! ${owner.name}'s Central Hill struck enemy teams for ${damageAmt} damage!`, 'hill', owner.id, firstHpChange);
 
             const aliveAfterHill = updatedPlayers.filter(p => !p.isEliminated);
-            if (aliveAfterHill.length <= 1) {
+            const aliveTeamsAfterHill = Array.from(new Set(aliveAfterHill.map(p => p.teamId)));
+            if (aliveTeamsAfterHill.length <= 1) {
+              const winningTeamId = aliveTeamsAfterHill[0];
               const champ = aliveAfterHill[0] || null;
               setWinner(champ);
-              setGamePhase('gameover');
+              setGamePhase('ended');
               if (champ) {
                 sound.playVictory();
-                addLog(`🏆 CHAMPION! ${champ.name} has defeated all rivals and won the match!`, 'system', champ.id);
+                addLog(`🏆 TEAM VICTORY! Team ${winningTeamId} has defeated all rivals and won the match!`, 'system', champ.id);
               }
               setPlayers(updatedPlayers);
               return;
@@ -913,7 +1300,8 @@ export function useGameState() {
       if (nextSlot >= actionsPerRound) {
         // Round end! Refill hands, reset shields, rotate priority, decrease pickup cooldowns & process player buff ticks
         setRound(r => r + 1);
-        setPriorityPlayerIdx(p => (p + 1) % players.length);
+        setUsedEmoteThisRound({});
+        setPriorityPlayerIdx(p => getNextAlivePlayerIdx(updatedPlayers, p + 1));
         setCurrentSlotIndex(0);
         setResolvingTurnOrder(0);
         setGamePhase('planning');
@@ -1042,7 +1430,7 @@ export function useGameState() {
 
   // Host state synchronization broadcast
   useEffect(() => {
-    if (multiplayerService.isHost && gamePhase === 'resolving') {
+    if (multiplayerService.isHost && (gamePhase === 'resolving' || gamePhase === 'ended' || gamePhase === 'gameover')) {
       multiplayerService.sendMessage({
         type: 'SYNC_GAME_STATE',
         senderPeerId: multiplayerService.peerId || '',
@@ -1135,8 +1523,14 @@ export function useGameState() {
     playSpeed,
     winner,
     currentAnimation,
+    currentPlayedCard,
+    previousPlayedCard,
     projectedIntents,
     floaters,
+    bloodBursts,
+    activeEmotes,
+    usedEmoteThisRound,
+    sendEmote: handleEmoteAction,
     localPlayerId,
     setLocalPlayerId,
     initGame,

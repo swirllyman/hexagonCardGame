@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { Card } from '../types/game';
 import { SafeImage } from './SafeImage';
 import { 
@@ -50,18 +51,66 @@ function renderCardIcon(iconName: string, className: string = 'w-6 h-6') {
 
 export const CardTooltip: React.FC<CardTooltipProps> = ({ card, position = 'top' }) => {
   const style = CATEGORY_STYLES[card.category];
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
 
-  const posClasses = 
-    position === 'top' ? 'bottom-full mb-3 left-1/2 -translate-x-1/2' :
-    position === 'bottom' ? 'top-full mt-3 left-1/2 -translate-x-1/2' :
-    position === 'left' ? 'right-full mr-3 top-1/2 -translate-y-1/2' :
-    'left-full ml-3 top-1/2 -translate-y-1/2';
+  useLayoutEffect(() => {
+    const updatePosition = () => {
+      if (anchorRef.current && anchorRef.current.parentElement) {
+        const rect = anchorRef.current.parentElement.getBoundingClientRect();
+        let top = rect.top;
+        let left = rect.left + rect.width / 2;
 
-  return (
-    <div className={`absolute ${posClasses} z-[100] w-64 ${style.bg} ${style.border} border-2 rounded-2xl p-3.5 shadow-[0_0_35px_rgba(0,0,0,0.95)] backdrop-blur-xl pointer-events-none animate-float transition-all`}>
+        if (position === 'top') {
+          top = rect.top - 10;
+        } else if (position === 'bottom') {
+          top = rect.bottom + 10;
+        } else if (position === 'left') {
+          left = rect.left - 10;
+          top = rect.top + rect.height / 2;
+        } else if (position === 'right') {
+          left = rect.right + 10;
+          top = rect.top + rect.height / 2;
+        }
+
+        const clampedLeft = Math.max(136, Math.min(window.innerWidth - 136, left));
+        setCoords({ top, left: clampedLeft });
+      }
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [position]);
+
+  const transformStyle = 
+    position === 'top' ? 'translate(-50%, -100%)' :
+    position === 'bottom' ? 'translate(-50%, 0)' :
+    position === 'left' ? 'translate(-100%, -50%)' :
+    'translate(0, -50%)';
+
+  const tooltipElement = coords ? (
+    <div 
+      style={{
+        position: 'fixed',
+        top: `${coords.top}px`,
+        left: `${coords.left}px`,
+        transform: transformStyle,
+        zIndex: 99999,
+        pointerEvents: 'none',
+      }}
+    >
+      <div 
+        className={`w-64 ${style.bg} ${style.border} fantasy-sharp-panel gold-corners-bottom border-2 rounded-none p-3.5 shadow-[0_0_35px_rgba(0,0,0,0.95)] backdrop-blur-xl pointer-events-none animate-float transition-all`}
+      >
       {/* Header Badge & Range */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2 gap-1">
-        <span className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded border whitespace-nowrap shrink-0 ${style.badge}`}>
+        <span className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-none border whitespace-nowrap shrink-0 ${style.badge}`}>
           {style.label}
         </span>
         <div className="flex items-center gap-1 text-xs font-mono text-amber-200/90 whitespace-nowrap shrink-0">
@@ -140,5 +189,13 @@ export const CardTooltip: React.FC<CardTooltipProps> = ({ card, position = 'top'
         '-left-1.5 top-1/2 -translate-y-1/2 border-b-2 border-l-2'
       } transform rotate-45 pointer-events-none`} />
     </div>
+  </div>
+  ) : null;
+
+  return (
+    <>
+      <span ref={anchorRef} className="hidden" />
+      {tooltipElement && createPortal(tooltipElement, document.body)}
+    </>
   );
 };

@@ -1,8 +1,9 @@
 import React from 'react';
-import type { HexTile, PlayerState, AxialCoord, StepAnimationState, Card, ProjectedIntent, CombatFloater } from '../types/game';
-import { hexToPixel, hexEquals, hexDistance, getFacingAngle } from '../utils/hexGrid';
+import type { HexTile, PlayerState, AxialCoord, StepAnimationState, Card, ProjectedIntent, CombatFloater, EmotePayload, BloodBurst } from '../types/game';
+import { hexToPixel, hexEquals, hexDistance, getFacingAngle, hexNeighborInDir, normalizeFacing, rotateFacing } from '../utils/hexGrid';
 import { UnitToken } from './UnitToken';
 import { CombatFloaterOverlay } from './CombatFloaterOverlay';
+import { BloodParticleOverlay } from './BloodParticleOverlay';
 import { Flame, Shield, Heart, Landmark, Crown } from 'lucide-react';
 import type { PlayerId } from '../types/game';
 
@@ -23,22 +24,26 @@ interface HexMapProps {
   selectedCard: Card | null;
   currentActorId?: string;
   currentAnimation: StepAnimationState | null;
+  gamePhase?: string;
+  currentSlotIndex?: number;
   projectedIntents?: ProjectedIntent[];
   floaters?: CombatFloater[];
+  bloodBursts?: BloodBurst[];
+  activeEmotes?: EmotePayload[];
   localPlayerId?: string;
   onHexHover: (coord: AxialCoord | null) => void;
   onHexClick: (coord: AxialCoord) => void;
 }
 
-const HEX_RADIUS = 42;
-const CENTER = { x: 380, y: 320 };
+const HEX_RADIUS = 48;
+const CENTER = { x: 380, y: 405 };
 
 function getHexPolygonPoints(center: { x: number; y: number }, radius: number): string {
   const points: string[] = [];
   for (let i = 0; i < 6; i++) {
     const angleRad = (Math.PI / 180) * (60 * i - 30);
     const px = center.x + radius * Math.cos(angleRad);
-    const py = center.y + radius * Math.sin(angleRad);
+    const py = center.y + radius * Math.sin(angleRad) * 0.72;
     points.push(`${px.toFixed(2)},${py.toFixed(2)}`);
   }
   return points.join(' ');
@@ -102,19 +107,28 @@ export const HexMap: React.FC<HexMapProps> = ({
   selectedCard,
   currentActorId,
   currentAnimation,
+  gamePhase,
+  currentSlotIndex = 0,
   projectedIntents = [],
   floaters = [],
+  bloodBursts = [],
+  activeEmotes = [],
   localPlayerId,
   onHexHover,
   onHexClick,
 }) => {
   const localPlayer = players.find(p => p.id === localPlayerId) || players.find(p => !p.isAi) || players[0];
 
+  // Filter projected intents in battle phase to only show the currently active slot action about to execute
+  const filteredIntents = projectedIntents.filter(intent => {
+    if (gamePhase === 'resolving') {
+      return intent.slotIndex === currentSlotIndex;
+    }
+    return true;
+  });
+
   return (
-    <div className="relative w-full h-full max-h-full fantasy-panel rounded-2xl border border-amber-600/30 shadow-2xl flex items-center justify-center overflow-hidden">
-      {/* Background Rune Array Grid */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-amber-950/20 via-slate-950/90 to-slate-950 pointer-events-none" />
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#d9770608_1px,transparent_1px),linear-gradient(to_bottom,#d9770608_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none" />
+    <div className="relative w-full h-full max-h-full bg-transparent flex items-center justify-center overflow-hidden">
 
       <svg className="w-full h-full relative z-10 select-none overflow-visible" viewBox="0 0 760 640" preserveAspectRatio="xMidYMid meet">
         <defs>
@@ -135,53 +149,64 @@ export const HexMap: React.FC<HexMapProps> = ({
           const points = getHexPolygonPoints(pixel, HEX_RADIUS - 2);
 
           const isHovered = hoveredHex && hexEquals(hoveredHex, tile.coord);
-          const occupant = players.find(p => !p.isEliminated && hexEquals(p.coord, tile.coord));
 
           // Distance check for targeting highlights
           const distFromLocal = localPlayer ? hexDistance(localPlayer.coord, tile.coord) : 99;
-          const isInRange = selectedCard && distFromLocal <= selectedCard.range && distFromLocal > 0;
+
+          // For movement cards, compute the specific targeted hex(es)
+          const isMoveForwardCard = selectedCard?.category === 'movement' && selectedCard?.facingMoveType === 'forward';
+          const isTurnCard = selectedCard?.category === 'movement' && selectedCard?.turnAmount !== undefined;
+          const forwardHex = (isMoveForwardCard && localPlayer)
+            ? hexNeighborInDir(localPlayer.coord, normalizeFacing(localPlayer.facing))
+            : null;
+
+          const isInRange = selectedCard && tile.terrain !== 'obstacle' && (
+            isMoveForwardCard
+              ? (forwardHex && hexEquals(tile.coord, forwardHex))
+              : (!isTurnCard && distFromLocal <= selectedCard.range && distFromLocal > 0)
+          );
 
           // Animation highlight targets
-          const isAnimTarget = currentAnimation?.targetCoords?.some(tc => hexEquals(tc, tile.coord));
+          const isAnimTarget = currentAnimation?.effectType === 'attack' && currentAnimation?.targetCoords?.some((tc: AxialCoord) => hexEquals(tc, tile.coord));
 
-          let fill = 'fill-slate-900/95';
-          let stroke = 'stroke-slate-800/80';
-          let strokeWidth = '1.2';
+          let fill = 'fill-[rgba(100,160,50,0.22)]';
+          let stroke = 'stroke-[rgba(160,220,70,0.55)]';
+          let strokeWidth = '1.5';
 
           if (tile.terrain === 'obstacle') {
-            fill = 'fill-slate-800/90';
-            stroke = 'stroke-amber-900/50';
+            fill = 'fill-[rgba(20,30,20,0.75)]';
+            stroke = 'stroke-lime-800/80';
           } else if (tile.terrain === 'rune') {
-            fill = 'fill-amber-950/40';
-            stroke = 'stroke-amber-500/80';
+            fill = 'fill-[rgba(234,179,8,0.25)]';
+            stroke = 'stroke-amber-400';
             strokeWidth = '2';
           } else if (tile.terrain === 'hill') {
-            fill = 'fill-amber-950/60';
-            stroke = tile.hillController ? 'stroke-amber-400 font-extrabold' : 'stroke-yellow-500/80';
+            fill = 'fill-[rgba(245,158,11,0.3)]';
+            stroke = tile.hillController ? 'stroke-amber-300 font-extrabold' : 'stroke-yellow-400/90';
             strokeWidth = '2.5';
           }
 
           if (isInRange) {
-            fill = 'fill-emerald-950/60';
-            stroke = 'stroke-emerald-400';
-            strokeWidth = '2';
-          }
-
-          if (isHovered) {
-            fill = 'fill-amber-950/70';
-            stroke = 'stroke-amber-300';
+            fill = 'fill-[rgba(16,185,129,0.45)]';
+            stroke = 'stroke-emerald-300';
             strokeWidth = '2.5';
           }
 
+          if (isHovered) {
+            fill = 'fill-[rgba(250,204,21,0.55)]';
+            stroke = 'stroke-amber-200';
+            strokeWidth = '3';
+          }
+
           if (isAnimTarget) {
-            fill = 'fill-rose-950/80';
-            stroke = 'stroke-rose-400';
+            fill = 'fill-[rgba(244,63,94,0.6)]';
+            stroke = 'stroke-rose-300';
             strokeWidth = '3';
           }
 
           return (
             <g
-              key={`${tile.coord.q},${tile.coord.r}`}
+              key={`tile-base-${tile.coord.q},${tile.coord.r}`}
               className="cursor-pointer transition-all duration-200"
               onMouseEnter={() => onHexHover(tile.coord)}
               onMouseLeave={() => onHexHover(null)}
@@ -194,14 +219,80 @@ export const HexMap: React.FC<HexMapProps> = ({
                 strokeWidth={strokeWidth}
               />
 
+              {/* Bloody Hex Surface Stains & Splatters */}
+              {tile.isBloody && (
+                <g className="pointer-events-none opacity-90">
+                  {/* Outer Splatter Stain */}
+                  <path
+                    d={`M ${pixel.x - 16} ${pixel.y - 4} Q ${pixel.x - 8} ${pixel.y - 16}, ${pixel.x + 8} ${pixel.y - 12} T ${pixel.x + 18} ${pixel.y + 2} T ${pixel.x + 6} ${pixel.y + 16} T ${pixel.x - 14} ${pixel.y + 10} Z`}
+                    fill="#7f1d1d"
+                    fillOpacity="0.75"
+                    filter="drop-shadow(0 2px 4px rgba(0,0,0,0.6))"
+                  />
+                  {/* Inner Dark Blood Pool */}
+                  <ellipse
+                    cx={pixel.x - 2}
+                    cy={pixel.y + 1}
+                    rx={12}
+                    ry={8}
+                    fill="#450a0a"
+                    fillOpacity="0.85"
+                  />
+                  {/* Splatter Droplets */}
+                  <circle cx={pixel.x - 20} cy={pixel.y - 11} r={2.8} fill="#991b1b" fillOpacity="0.9" />
+                  <circle cx={pixel.x + 20} cy={pixel.y - 9} r={2.2} fill="#dc2626" fillOpacity="0.85" />
+                  <circle cx={pixel.x + 14} cy={pixel.y + 18} r={3.2} fill="#7f1d1d" fillOpacity="0.9" />
+                  <circle cx={pixel.x - 18} cy={pixel.y + 14} r={2.0} fill="#991b1b" fillOpacity="0.85" />
+                  <circle cx={pixel.x + 5} cy={pixel.y - 21} r={2.4} fill="#b91c1c" fillOpacity="0.9" />
+                  <circle cx={pixel.x - 7} cy={pixel.y - 23} r={1.6} fill="#450a0a" fillOpacity="0.85" />
+                  <circle cx={pixel.x + 23} cy={pixel.y + 7} r={1.8} fill="#991b1b" fillOpacity="0.8" />
+                  <circle cx={pixel.x - 23} cy={pixel.y + 3} r={2.1} fill="#7f1d1d" fillOpacity="0.85" />
+                </g>
+              )}
+
+              {/* Controlled or Contested Glowing Aura */}
+              {tile.terrain === 'hill' && (() => {
+                const controller = tile.hillController;
+                const progress = tile.hillProgress;
+                const activePlayerId = controller || progress?.playerId;
+                const activeColor = getFactionColor(activePlayerId);
+                const isCaptured = !!controller;
+                if (!activePlayerId) return null;
+
+                return (
+                  <circle
+                    cx={pixel.x}
+                    cy={pixel.y}
+                    r={HEX_RADIUS - 8}
+                    fill={activeColor}
+                    fillOpacity={isCaptured ? 0.25 : 0.12}
+                    stroke={activeColor}
+                    strokeWidth={isCaptured ? 2 : 1}
+                    className={isCaptured ? 'animate-pulse' : ''}
+                  />
+                );
+              })()}
+            </g>
+          );
+        })}
+
+        {/* Pass 2: Foreground Terrain Icons, Glyphs & King of the Hill Crown Overlay */}
+        {hexGrid.map((tile) => {
+          const pixel = hexToPixel(tile.coord, HEX_RADIUS, CENTER);
+          const occupant = players.find(p => !p.isEliminated && hexEquals(p.coord, tile.coord));
+          const isHovered = hoveredHex && hexEquals(hoveredHex, tile.coord);
+          const isAnimTarget = currentAnimation?.effectType === 'attack' && currentAnimation?.targetCoords?.some((tc: AxialCoord) => hexEquals(tc, tile.coord));
+
+          return (
+            <g key={`tile-fg-${tile.coord.q},${tile.coord.r}`} className="pointer-events-none">
               {/* Terrain Obstacle Pillar Glyph */}
               {tile.terrain === 'obstacle' && (
-                <g transform={`translate(${pixel.x - 7}, ${pixel.y - 7})`} className="pointer-events-none opacity-60">
+                <g transform={`translate(${pixel.x - 7}, ${pixel.y - 7})`} className="opacity-60">
                   <Landmark className="w-3.5 h-3.5 text-slate-400" />
                 </g>
               )}
 
-              {/* King of the Hill (KOTH) Nexus Hex */}
+              {/* King of the Hill (KOTH) Nexus Hex Overlay */}
               {tile.terrain === 'hill' && (() => {
                 const controller = tile.hillController;
                 const progress = tile.hillProgress;
@@ -214,21 +305,7 @@ export const HexMap: React.FC<HexMapProps> = ({
                 const pip2Lit = turns >= 2;
 
                 return (
-                  <g className="pointer-events-none">
-                    {/* Controlled or Contested Glowing Aura */}
-                    {activePlayerId && (
-                      <circle
-                        cx={pixel.x}
-                        cy={pixel.y}
-                        r={HEX_RADIUS - 8}
-                        fill={activeColor}
-                        fillOpacity={isCaptured ? 0.25 : 0.12}
-                        stroke={activeColor}
-                        strokeWidth={isCaptured ? 2 : 1}
-                        className={isCaptured ? 'animate-pulse' : ''}
-                      />
-                    )}
-
+                  <g>
                     {/* Progress Pips */}
                     <circle
                       cx={pixel.x - 9}
@@ -249,7 +326,7 @@ export const HexMap: React.FC<HexMapProps> = ({
                       strokeWidth={1}
                     />
 
-                    {/* Central Crown Icon */}
+                    {/* Central Crown Icon & Label */}
                     <g transform={`translate(${pixel.x}, ${pixel.y})`}>
                       {!occupant && (
                         <>
@@ -317,7 +394,7 @@ export const HexMap: React.FC<HexMapProps> = ({
                 }
 
                 return (
-                  <g className="pointer-events-none">
+                  <g>
                     {/* Render Hex Border Cooldown Pips */}
                     {pips}
 
@@ -356,7 +433,7 @@ export const HexMap: React.FC<HexMapProps> = ({
                   x={pixel.x}
                   y={pixel.y + 24}
                   textAnchor="middle"
-                  className="fill-slate-200 text-[10px] font-bold font-mono pointer-events-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] z-30"
+                  className="fill-slate-200 text-[10px] font-bold font-mono drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] z-30"
                 >
                   {tile.coord.q},{tile.coord.r}
                 </text>
@@ -398,8 +475,101 @@ export const HexMap: React.FC<HexMapProps> = ({
           );
         })}
 
+        {/* Turn Card Preview: Large vivid facing indicator */}
+        {(() => {
+          if (!selectedCard || !localPlayer || selectedCard.turnAmount === undefined) return null;
+          const turnAmt = selectedCard.turnAmount;
+          const newFacing = rotateFacing(localPlayer.facing, turnAmt);
+          const pPx = hexToPixel(localPlayer.coord, HEX_RADIUS, CENTER);
+          const newAngle = getFacingAngle(newFacing);
+          const currentAngle = getFacingAngle(localPlayer.facing);
+
+          // Build a sweep arc from current facing to new facing
+          const { startAngle, endAngle, isClockwise } = getArcAngles(localPlayer.facing, newFacing, turnAmt);
+          const ARC_R = 34;
+          const arcPath = describeSvgArc(pPx.x, pPx.y, ARC_R, startAngle, endAngle, isClockwise);
+          // Arrowhead tip at end of arc
+          const endRad = (Math.PI / 180) * endAngle;
+          const arcTipX = pPx.x + ARC_R * Math.cos(endRad);
+          const arcTipY = pPx.y + ARC_R * Math.sin(endRad);
+
+          return (
+            <g className="pointer-events-none">
+              {/* Pulsing hex ring highlight around player */}
+              <polygon
+                points={getHexPolygonPoints(pPx, HEX_RADIUS - 4)}
+                fill="none"
+                stroke="#34d399"
+                strokeWidth="3"
+                strokeOpacity="0.7"
+                className="animate-pulse"
+              />
+              <polygon
+                points={getHexPolygonPoints(pPx, HEX_RADIUS + 4)}
+                fill="#34d399"
+                fillOpacity="0.08"
+                stroke="#34d399"
+                strokeWidth="1.5"
+                strokeOpacity="0.35"
+                className="animate-pulse"
+              />
+
+              {/* Dimmed current facing arrow */}
+              <g transform={`translate(${pPx.x}, ${pPx.y}) rotate(${currentAngle})`} opacity="0.3">
+                <polygon points="18,-8 38,0 18,8 24,0" fill="#fbbf24" stroke="#090d16" strokeWidth="1" />
+              </g>
+
+              {/* Sweep arc showing rotation path */}
+              <path
+                d={arcPath}
+                fill="none"
+                stroke="#34d399"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeOpacity="0.9"
+                className="animate-pulse"
+              />
+              {/* Arc glow (thicker, blurred) */}
+              <path
+                d={arcPath}
+                fill="none"
+                stroke="#34d399"
+                strokeWidth="10"
+                strokeLinecap="round"
+                strokeOpacity="0.2"
+              />
+              {/* Arrowhead at end of sweep arc */}
+              <g transform={`translate(${arcTipX}, ${arcTipY}) rotate(${newAngle + (isClockwise ? 90 : -90)})`}>
+                <polygon points="0,-5 9,5 -9,5" fill="#34d399" fillOpacity="0.95" stroke="#064e3b" strokeWidth="1" />
+              </g>
+
+              {/* Large destination arrow pointing in new facing direction */}
+              <g transform={`translate(${pPx.x}, ${pPx.y}) rotate(${newAngle})`} className="animate-pulse">
+                {/* Outer glow ellipse */}
+                <ellipse cx={32} cy={0} rx={20} ry={14} fill="#34d399" fillOpacity="0.15" />
+                {/* Big bold arrow */}
+                <polygon
+                  points="20,-11 46,0 20,11 28,0"
+                  fill="#34d399"
+                  fillOpacity="1"
+                  stroke="#064e3b"
+                  strokeWidth="2"
+                />
+              </g>
+
+              {/* Label pill above the hex */}
+              <g transform={`translate(${pPx.x}, ${pPx.y - 56})`}>
+                <rect x="-38" y="-12" width="76" height="22" rx="6" fill="#064e3b" stroke="#34d399" strokeWidth="2" opacity="0.97" />
+                <text x="0" y="4" textAnchor="middle" fill="#34d399" fontSize="10" fontWeight="bold" fontFamily="monospace" letterSpacing="0.5">
+                  NEW FACING
+                </text>
+              </g>
+            </g>
+          );
+        })()}
+
         {/* Render Projected Intent Trajectories & Threat Cones */}
-        {projectedIntents.map((intent, idx) => {
+        {filteredIntents.map((intent, idx) => {
           const fromPx = hexToPixel(intent.fromCoord, HEX_RADIUS, CENTER);
           const toPx = hexToPixel(intent.toCoord, HEX_RADIUS, CENTER);
           const player = players.find(p => p.id === intent.playerId);
@@ -414,7 +584,7 @@ export const HexMap: React.FC<HexMapProps> = ({
             <g key={`intent-${intent.playerId}-${intent.slotIndex}-${idx}`} className="pointer-events-none">
               {/* Dashed Trajectory Line for Linear Movement */}
               {isMove && !hexEquals(intent.fromCoord, intent.toCoord) && (() => {
-                const prevIntent = projectedIntents.find(p => p.playerId === intent.playerId && p.slotIndex === intent.slotIndex - 1);
+                const prevIntent = filteredIntents.find(p => p.playerId === intent.playerId && p.slotIndex === intent.slotIndex - 1);
                 let lineStartX = fromPx.x;
                 let lineStartY = fromPx.y;
 
@@ -538,6 +708,7 @@ export const HexMap: React.FC<HexMapProps> = ({
           const pixel = hexToPixel(player.coord, HEX_RADIUS, CENTER);
           const isActor = currentActorId === player.id;
           const isLocal = localPlayerId === player.id;
+          const playerEmote = activeEmotes.filter(e => e.senderId === player.id).slice(-1)[0];
 
           return (
             <foreignObject
@@ -549,11 +720,14 @@ export const HexMap: React.FC<HexMapProps> = ({
               className="overflow-visible pointer-events-none transition-all duration-500 ease-out"
             >
               <div className="w-full h-full flex items-center justify-center pointer-events-auto">
-                <UnitToken player={player} isCurrentActor={isActor} isLocalPlayer={isLocal} />
+                <UnitToken player={player} isCurrentActor={isActor} isLocalPlayer={isLocal} activeEmote={playerEmote} />
               </div>
             </foreignObject>
           );
         })}
+
+        {/* Blood Particle Overlay */}
+        <BloodParticleOverlay bursts={bloodBursts || []} hexRadius={HEX_RADIUS} center={CENTER} />
 
         {/* Combat Floater Overlay */}
         <CombatFloaterOverlay floaters={floaters || []} hexRadius={HEX_RADIUS} center={CENTER} />
