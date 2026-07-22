@@ -243,7 +243,7 @@ export interface HexTile {
   runeCooldown?: number;
   maxRuneCooldown?: number;
   hillController?: PlayerId | null;
-  hillProgress?: { playerId: PlayerId; turnsCount: number } | null;
+  hillProgress?: { playerId: PlayerId; turnsCount: number; lastSlotProcessed?: number } | null;
   isBloody?: boolean;
   bloodSeed?: number;
 }

@@ -528,4 +528,24 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* ─── Round Banner ─── */
+@keyframes roundBannerIn {
+  0%   { opacity: 0; transform: translateY(-18px) scale(0.88); letter-spacing: 0.35em; }
+  40%  { opacity: 1; transform: translateY(0px)   scale(1.04); letter-spacing: 0.22em; }
+  65%  { transform: scale(1);    letter-spacing: 0.2em; }
+  100% { opacity: 1; transform: scale(1);    letter-spacing: 0.2em; }
+}
+
+@keyframes roundBannerOut {
+  0%   { opacity: 1; transform: scale(1) translateY(0);  }
+  100% { opacity: 0; transform: scale(0.9) translateY(10px); }
+}
+
+.round-banner-enter {
+  animation: roundBannerIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.round-banner-exit {
+  animation: roundBannerOut 0.45s ease-in forwards;
+}
 

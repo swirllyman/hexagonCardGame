@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useGameState } from './state/useGameState';
 import { useMultiplayer } from './hooks/useMultiplayer';
 import { HexMap } from './components/HexMap';
@@ -73,6 +73,7 @@ export function App() {
   const [scale, setScale] = useState<number>(1);
   const [timeLeft, setTimeLeft] = useState<number>(30);
   const [showMatchEndedNext, setShowMatchEndedNext] = useState<boolean>(false);
+  const [roundBanner, setRoundBanner] = useState<{ round: number; fading: boolean } | null>(null);
 
   // Show the "Next" button after 3s in the 'ended' phase
   useEffect(() => {
@@ -84,6 +85,33 @@ export function App() {
       setShowMatchEndedNext(false);
     }
   }, [gamePhase]);
+
+  // Show "Round X" banner on each new round.
+  const lastDisplayedRoundRef = useRef<number>(0);
+  useEffect(() => {
+    if (gamePhase === 'setup') {
+      lastDisplayedRoundRef.current = 0;
+      return;
+    }
+    if (gamePhase === 'ended') return;
+    if (round === lastDisplayedRoundRef.current) return;
+    lastDisplayedRoundRef.current = round;
+
+    setRoundBanner({ round, fading: false });
+
+    const timer1 = setTimeout(() => {
+      setRoundBanner(prev => prev ? { ...prev, fading: true } : null);
+    }, 1000);
+
+    const timer2 = setTimeout(() => {
+      setRoundBanner(null);
+    }, 1450); // 1000ms hold + 450ms fade
+
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
+  }, [round, gamePhase]);
 
   const controlledPlayer = players.find((p) => p.id === localPlayerId) || players.find((p) => !p.isAi) || players[0];
   const isOnlineMatch = multiplayer.role !== 'single';
@@ -368,7 +396,7 @@ export function App() {
                   />
                 </div>
 
-                <div className="flex-1 min-h-0 w-full overflow-hidden">
+                <div className="flex-1 min-h-0 w-full overflow-hidden relative">
                   <HexMap
                     hexGrid={hexGrid}
                     players={players}
@@ -391,6 +419,32 @@ export function App() {
                     onHexClick={() => {}}
                     onAnimationComplete={clearAnimation}
                   />
+
+                  {/* Round Banner Overlay */}
+                  {roundBanner && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
+                      <div
+                        className={`${
+                          roundBanner.fading ? 'round-banner-exit' : 'round-banner-enter'
+                        } flex flex-col items-center gap-1`}
+                      >
+                        {/* Decorative top line */}
+                        <div className="w-48 h-px bg-gradient-to-r from-transparent via-amber-400/80 to-transparent" />
+                        <div className="px-10 py-3 bg-slate-950/85 border border-amber-500/60 shadow-2xl backdrop-blur-sm"
+                          style={{ boxShadow: '0 0 40px rgba(245,158,11,0.25), inset 0 1px 0 rgba(245,158,11,0.15)' }}
+                        >
+                          <span
+                            className="block text-4xl font-black tracking-[0.2em] uppercase font-fantasy gold-gradient-text"
+                            style={{ textShadow: '0 0 30px rgba(245,158,11,0.6), 0 2px 8px rgba(0,0,0,0.8)' }}
+                          >
+                            Round {roundBanner.round}
+                          </span>
+                        </div>
+                        {/* Decorative bottom line */}
+                        <div className="w-48 h-px bg-gradient-to-r from-transparent via-amber-400/80 to-transparent" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

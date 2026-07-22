@@ -371,6 +371,16 @@ export const HexMap: React.FC<HexMapProps> = ({
                           </text>
                         </>
                       )}
+                      {occupant && (
+                        <text
+                          x={0}
+                          y={HEX_RADIUS - 5}
+                          textAnchor="middle"
+                          className="fill-amber-200 text-[8px] font-extrabold tracking-wider font-mono select-none drop-shadow"
+                        >
+                          {controller === occupant.id ? 'KING OF HILL' : 'CONTESTING 1/2'}
+                        </text>
+                      )}
                     </g>
                   </g>
                 );

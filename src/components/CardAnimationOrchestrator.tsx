@@ -84,8 +84,8 @@ export const CardAnimationOrchestrator: React.FC<CardAnimationOrchestratorProps>
   const startY = -140 + playerIdx * 75; // Y offset from player status card slot
   const startX = -60;
 
-  const speedMult = playSpeed === 1 ? 1.0 : playSpeed === 2 ? 0.55 : 0.35;
-  const animDuration = `${1.25 * speedMult}s`;
+  const speedMult = playSpeed === 1 ? 1.5 : playSpeed === 2 ? 0.75 : 0.375;
+  const animDuration = `${1.2 * (speedMult / 1.5) * 1.5}s`;
 
   return (
     <div

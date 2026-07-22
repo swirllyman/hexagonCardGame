@@ -143,6 +143,7 @@ export function useGameState() {
     setBloodBursts(prev => [...prev, newBurst]);
   }, []);
 
+
   // Cleanup floaters after 5s
   useEffect(() => {
     if (floaters.length === 0) return;
@@ -192,6 +193,32 @@ export function useGameState() {
     };
     setBattleLog(prev => [entry, ...prev]);
   }, [round, gamePhase, currentSlotIndex]);
+
+  const checkHillEntry = useCallback((latestPlayers: PlayerState[]) => {
+    const hillTileIdx = hexGrid.findIndex(t => t.terrain === 'hill' || (t.coord.q === 0 && t.coord.r === 0));
+    if (hillTileIdx === -1) return;
+    const hillTile = hexGrid[hillTileIdx];
+    const hillCoord = hillTile.coord;
+
+    const hillOccupant = latestPlayers.find(p => !p.isEliminated && hexEquals(p.coord, hillCoord));
+    if (hillOccupant) {
+      const currentController = hillTile.hillController || null;
+      const currentProgress = hillTile.hillProgress || null;
+
+      if (currentController !== hillOccupant.id) {
+        if (!currentProgress || currentProgress.playerId !== hillOccupant.id) {
+          addFloater(hillCoord, 'CONTESTING 1/2', 'hill');
+          sound.playCardSelect();
+          addLog(`🏰 ${hillOccupant.name} entered the Central Hill! CONTESTING 1/2 (1/2 turns to capture)`, 'hill', hillOccupant.id);
+
+          setHexGrid(prevGrid => prevGrid.map((t, idx) => idx === hillTileIdx ? {
+            ...t,
+            hillProgress: { playerId: hillOccupant.id, turnsCount: 1, lastSlotProcessed: currentSlotIndex }
+          } : t));
+        }
+      }
+    }
+  }, [hexGrid, currentSlotIndex, addFloater, addLog]);
 
   // Start new match
   const initGame = useCallback((setupOptions: SetupPlayerOption[], actionsCount: number = 3) => {
@@ -652,13 +679,14 @@ export function useGameState() {
               newProgress = { playerId: hillOccupant.id, turnsCount: 2 };
               triggerStrikeFor = hillOccupant;
             } else {
+              const isFirstTurnOfEntry = currentProgress?.lastSlotProcessed === currentSlotIndex && currentProgress?.playerId === hillOccupant.id;
               const prevTurns = (currentProgress && currentProgress.playerId === hillOccupant.id) ? currentProgress.turnsCount : 0;
-              const newTurns = prevTurns + 1;
+              const newTurns = isFirstTurnOfEntry ? 1 : prevTurns + 1;
 
               if (newTurns >= 2) {
                 const prevOwnerName = currentController ? currentPlayers.find(p => p.id === currentController)?.name : null;
                 newController = hillOccupant.id;
-                newProgress = { playerId: hillOccupant.id, turnsCount: 2 };
+                newProgress = { playerId: hillOccupant.id, turnsCount: 2, lastSlotProcessed: currentSlotIndex };
                 addFloater(hillCoord, '👑 HILL CAPTURED!', 'hill');
                 sound.playVictory();
 
@@ -670,10 +698,12 @@ export function useGameState() {
 
                 triggerStrikeFor = hillOccupant;
               } else {
-                newProgress = { playerId: hillOccupant.id, turnsCount: 1 };
-                addFloater(hillCoord, 'CONTESTING 1/2', 'hill');
-                sound.playCardSelect();
-                addLog(`🏰 ${hillOccupant.name} is standing in the Central Hill! (1/2 turns to capture)`, 'hill', hillOccupant.id);
+                newProgress = { playerId: hillOccupant.id, turnsCount: 1, lastSlotProcessed: currentSlotIndex };
+                if (!isFirstTurnOfEntry) {
+                  addFloater(hillCoord, 'CONTESTING 1/2', 'hill');
+                  sound.playCardSelect();
+                  addLog(`🏰 ${hillOccupant.name} is standing in the Central Hill! (1/2 turns to capture)`, 'hill', hillOccupant.id);
+                }
 
                 if (currentController) {
                   const ownerPlayer = currentPlayers.find(p => p.id === currentController && !p.isEliminated);
@@ -763,7 +793,6 @@ export function useGameState() {
 
         const nextSlot = currentSlotIndex + 1;
         if (nextSlot >= actionsPerRound) {
-          setRound(r => r + 1);
           setUsedEmoteThisRound({});
           setPriorityPlayerIdx(p => getNextAlivePlayerIdx(currentPlayers, p + 1));
           setCurrentSlotIndex(0);
@@ -883,9 +912,9 @@ export function useGameState() {
       stepNumber: resolvingTurnOrder + 1,
     };
 
-    const speedMult = playSpeed === 1 ? 1.0 : playSpeed === 2 ? 0.55 : 0.35;
-    const animDurationMs = Math.floor(1150 * speedMult);
-    const actionReactionMs = Math.floor(180 * speedMult);
+    const speedMult = playSpeed === 1 ? 1.5 : playSpeed === 2 ? 0.75 : 0.375;
+    const animDurationMs = Math.floor(1200 * speedMult);
+    const actionReactionMs = Math.floor(200 * speedMult);
 
     // Single unified card animation: Pop out from player UI slot on left -> hold 1s during action -> glide to Red box LAST TURN
     setAnimatingRecord(stepRecord);
@@ -1510,6 +1539,9 @@ export function useGameState() {
         addLog(`${actor.name} passed (empty slot - passive round).`, 'system', actor.id);
       }
 
+    // Check King of the Hill entry immediately upon movement/displacement
+    checkHillEntry(updatedPlayers);
+
     // Check for newly eliminated heroes and trigger blood particle spray & bloody hex tile
     let priorityNeedsUpdate = false;
     players.forEach(oldP => {
@@ -1578,14 +1610,15 @@ export function useGameState() {
             triggerStrikeFor = hillOccupant;
           } else {
             // Enemy standing on the hill - contesting/capping
+            const isFirstTurnOfEntry = currentProgress?.lastSlotProcessed === currentSlotIndex && currentProgress?.playerId === hillOccupant.id;
             const prevTurns = (currentProgress && currentProgress.playerId === hillOccupant.id) ? currentProgress.turnsCount : 0;
-            const newTurns = prevTurns + 1;
+            const newTurns = isFirstTurnOfEntry ? 1 : prevTurns + 1;
 
             if (newTurns >= 2) {
               // CAPTURED by new player!
               const prevOwnerName = currentController ? updatedPlayers.find(p => p.id === currentController)?.name : null;
               newController = hillOccupant.id;
-              newProgress = { playerId: hillOccupant.id, turnsCount: 2 };
+              newProgress = { playerId: hillOccupant.id, turnsCount: 2, lastSlotProcessed: currentSlotIndex };
               addFloater(hillCoord, '👑 HILL CAPTURED!', 'hill');
               sound.playVictory();
 
@@ -1598,10 +1631,12 @@ export function useGameState() {
               triggerStrikeFor = hillOccupant;
             } else {
               // Contesting Turn 1
-              newProgress = { playerId: hillOccupant.id, turnsCount: 1 };
-              addFloater(hillCoord, 'CONTESTING 1/2', 'hill');
-              sound.playCardSelect();
-              addLog(`🏰 ${hillOccupant.name} is standing in the Central Hill! (1/2 turns to capture)`, 'hill', hillOccupant.id);
+              newProgress = { playerId: hillOccupant.id, turnsCount: 1, lastSlotProcessed: currentSlotIndex };
+              if (!isFirstTurnOfEntry) {
+                addFloater(hillCoord, 'CONTESTING 1/2', 'hill');
+                sound.playCardSelect();
+                addLog(`🏰 ${hillOccupant.name} is standing in the Central Hill! (1/2 turns to capture)`, 'hill', hillOccupant.id);
+              }
 
               // Existing owner still strikes during contest turn 1
               if (currentController) {
@@ -1807,6 +1842,9 @@ export function useGameState() {
       setResolvingTurnOrder(nextTurnOrder);
     }
 
+      // Update players state immediately at hold position (t=180ms) so character turn action renders on hex map in real-time!
+      setPlayers(updatedPlayers);
+
       setTimeout(() => {
         setPreviousPlayedCard(stepRecord);
         setCardAnimStage('idle');
@@ -1827,14 +1865,14 @@ export function useGameState() {
   useEffect(() => {
     const isClient = !!multiplayerService.roomCode && !multiplayerService.isHost;
     if (gamePhase === 'resolving' && isAutoPlay && !isClient && cardAnimStage === 'idle') {
-      const speedMult = playSpeed === 1 ? 1.0 : playSpeed === 2 ? 0.55 : 0.35;
+      const speedMult = playSpeed === 1 ? 1.5 : playSpeed === 2 ? 0.75 : 0.375;
       const order = [];
       for (let i = 0; i < players.length; i++) {
         order.push((priorityPlayerIdx + i) % players.length);
       }
       const actingPlayer = players[order[resolvingTurnOrder]];
       const isEliminatedStep = !actingPlayer || actingPlayer.isEliminated;
-      const delayMs = isEliminatedStep ? 50 : Math.floor(250 * speedMult);
+      const delayMs = isEliminatedStep ? 50 : Math.floor(250 * (speedMult / 1.5));
 
       autoPlayTimerRef.current = setTimeout(() => {
         executeNextStepRef.current();

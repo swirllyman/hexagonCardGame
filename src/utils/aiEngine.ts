@@ -130,6 +130,22 @@ export function programAiTurn(
   let currentEstCoord: AxialCoord = bot.coord;
   let currentEstFacing: number = bot.facing;
 
+  // Pre-compute enemies currently standing on the hill (for denial urgency scaling)
+  const enemiesContestingHill = activeEnemies.filter(e => hexEquals(e.coord, hillCoord)).length;
+
+  // Hill urgency: how badly do we need to act on the hill RIGHT NOW?
+  // 0 = we own it, 1 = neutral, 2 = enemy owns it (very urgent), 3 = enemy contesting AND owns = critical
+  let hillUrgency: number;
+  if (isSelfControllingHill) {
+    hillUrgency = 0;
+  } else if (!hillControllerId) {
+    hillUrgency = 1;
+  } else if (isEnemyControllingHill && enemiesContestingHill === 0) {
+    hillUrgency = 2; // Enemy owns but not standing on it — take now!
+  } else {
+    hillUrgency = 3; // Enemy owns AND is standing there — critical denial needed
+  }
+
   for (let slot = 0; slot < targetSlotCount; slot++) {
     // Determine target primary enemy from current estimated position
     let targetEnemy = activeEnemies[0];
@@ -143,8 +159,8 @@ export function programAiTurn(
       // Bonus for low HP enemies (kill potential)
       if (enemy.hp <= 35) targetPriority += 60;
 
-      // Bonus for enemy holding the Hill
-      if (hexEquals(enemy.coord, hillCoord)) targetPriority += 75;
+      // Strong bonus for targeting the enemy holding / contesting the Hill
+      if (hexEquals(enemy.coord, hillCoord)) targetPriority += 100;
 
       // Bonus if enemy is facing away (backstab candidate)
       const enemyFacing = normalizeFacing(enemy.facing);
@@ -209,26 +225,51 @@ export function programAiTurn(
       const isFacingTarget = normalizeFacing(currentEstFacing) === normalizeFacing(targetDir);
       const isNextFacingTarget = normalizeFacing(nextFacing) === normalizeFacing(targetDir);
 
+      // Urgency multiplier: ramps up based on how critical the hill situation is
+      const urgencyMult = [1.0, 1.3, 1.7, 2.2][hillUrgency];
+
       // -------------------------------------------------------------
-      // 2. KING OF THE HILL STRATEGY
+      // 2. KING OF THE HILL STRATEGY (Primary strategic objective)
       // -------------------------------------------------------------
       if (isNextOnHill) {
         if (isEnemyControllingHill) {
-          score += 180 * archetype.hillWeight; // Steal hill from enemy!
+          // CRITICAL: Denying enemy their hill strike AND stealing control
+          score += 260 * archetype.hillWeight * urgencyMult;
+        } else if (isSelfControllingHill && !hexEquals(currentEstCoord, hillCoord)) {
+          // Teammate controls hill — step on it to reinforce / re-trigger strikes
+          score += 180 * archetype.hillWeight;
         } else if (isSelfControllingHill) {
-          score += 120 * archetype.hillWeight; // Maintain hill dominance
+          // We own it and we're already there — maintain!
+          score += 200 * archetype.hillWeight;
         } else {
-          score += 150 * archetype.hillWeight; // Capture central hill!
+          // Unclaimed hill — capture it!
+          score += 220 * archetype.hillWeight * urgencyMult;
         }
       } else if (isCurrentOnHill && card.category === 'movement' && !card.turnAmount) {
-        // Leaving central hill penalty unless in danger
-        if (!isCriticalHp) {
-          score -= 90 * archetype.hillWeight;
+        // Leaving the hill — heavy penalty unless we're about to die
+        if (isCriticalHp) {
+          score -= 40; // Mild penalty, survival takes priority
+        } else if (isLowHp) {
+          score -= 60;
+        } else {
+          score -= 130 * archetype.hillWeight; // Strong: don't give up control!
         }
       } else if (!isCurrentOnHill) {
-        // Approaching hill bonus
+        // Approaching hill bonus — scales with closeness and urgency
         if (nextHillDist < currentHillDist) {
-          score += 35 * archetype.hillWeight * (4 - nextHillDist);
+          // More reward the closer we get (3 steps away = 1x, 2 steps = 2x, 1 step = 3x)
+          const closenessMultiplier = Math.max(1, 4 - nextHillDist);
+          score += 55 * archetype.hillWeight * urgencyMult * closenessMultiplier;
+        } else if (nextHillDist === currentHillDist && card.category === 'movement' && card.turnAmount) {
+          // Turning while off-hill: bonus if the turn aligns us toward the hill
+          const hillDir = getDirectionFromTo(currentEstCoord, hillCoord);
+          const distToHillFacing = Math.min(
+            Math.abs(nextFacing - hillDir),
+            6 - Math.abs(nextFacing - hillDir)
+          );
+          if (distToHillFacing <= 1) {
+            score += 30 * archetype.hillWeight; // Now facing hill — good pivot!
+          }
         }
       }
 
@@ -310,17 +351,20 @@ export function programAiTurn(
         if (enemiesHit > 0) {
           score += 60 + totalDamage * 1.5 * archetype.aggroWeight;
           if (enemiesHit >= 2) score += 50; // AOE multi-hit bonus!
-          if (hitHillOccupant) score += 45; // Punish enemy holding Hill
+          if (hitHillOccupant) {
+            // Hitting an enemy ON the hill is critical denial — scales with urgency
+            score += 90 * archetype.hillWeight * urgencyMult;
+          }
         } else {
           // Attack misses target penalty
           score -= 35;
         }
 
-        // Special Attack Abilities (Pull / Knockback / Combos)
+        // Special Attack & Displacement Abilities
+        const enemyOnHill = activeEnemies.find(e => hexEquals(e.coord, hillCoord));
         if (card.type === 'scorpion_pull' || card.type === 'hook_shot') {
-          // Pull enemy on Hill or out of cover
-          const enemyOnHill = activeEnemies.find(e => hexEquals(e.coord, hillCoord));
-          if (enemyOnHill) score += 110;
+          // Pulling enemy off hill = denial
+          if (enemyOnHill) score += 150 * archetype.hillWeight * urgencyMult;
         } else if (card.type === 'vampiric' && isLowHp) {
           score += 80;
         }
@@ -360,9 +404,10 @@ export function programAiTurn(
         if (card.type === 'meditate' || card.type === 'blood_pact') {
           if (isLowHp) score += 90 * archetype.survivalWeight;
         }
-        if (card.type === 'push' || card.type === 'repulsion_blast') {
+        if (card.type === 'push' || card.type === 'repulsion_blast' || card.type === 'gravitational_surge') {
+          // Displacement cards are INCREDIBLY valuable for hill denial
           const enemyOnHill = activeEnemies.find(e => hexEquals(e.coord, hillCoord));
-          if (enemyOnHill) score += 100; // Knock enemy off central Hill!
+          if (enemyOnHill) score += 180 * archetype.hillWeight * urgencyMult; // Knock enemy off central Hill!
         }
       }
 
